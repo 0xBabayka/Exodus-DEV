@@ -2770,7 +2770,7 @@ CTX.arc(cx+tp_px.x, cy+tp_px.y, 8+Math.sin(mp*15)*4, 0, 6.28); CTX.stroke(); if(
 } else if (s.phase === 'return') { const mp_au = getOrbitalPos(base, time, 1.0);
 const mp_px = {x: mp_au.x * z, y: mp_au.y * z}; s.progress += ((currentTime - s.lastTick)/1000)/s.duration; s.lastTick=currentTime;
 if(s.progress>=1) { if (s.cargoItem) { STATE.inventory[s.cargoItem]=(STATE.inventory[s.cargoItem]||0)+s.cargoAmount; log(`LOG: ${s.type} returned with ${Math.floor(s.cargoAmount)} ${s.cargoItem}`); } else { log(`LOG: ${s.type} returned to Base.`);
-} STATE.hangar[s.type]++; STATE.ships.splice(i,1); updateUI();
+} STATE.hangar[s.type]++; STATE.ships.splice(i,1); updateUI(); actionSave();
 } else { const pos_au = interpolate(s.startPos, mp_au, s.progress); const pos_px = {x: pos_au.x * z, y: pos_au.y * z};
 drawShip(cx, cy, pos_px, mp_px, s); } }
 }
