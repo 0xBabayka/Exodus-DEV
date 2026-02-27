@@ -2764,8 +2764,7 @@ CTX.beginPath(); CTX.arc(cx + tp_px.x, cy + tp_px.y, 12 + Math.sin(currentTime /
 CTX.globalAlpha = 0.9; CTX.lineWidth = 1.5;
 CTX.beginPath(); CTX.arc(cx + tp_px.x, cy + tp_px.y, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * sp); CTX.stroke();
 CTX.restore();
-if(sp >= 1) { scanBody(t); s.phase = 'return'; s.progress = 0; s.lastTick = currentTime; s.startPos = {x: tp_au.x, y: tp_au.y};
-s.cargoAmount = 0; s.cargoItem = null; log(`CMD: ${t.name} scan complete. Data acquired. Returning.`); }
+if(sp >= 1 && !s._scanPending) { s._scanPending = true; completeScan(s, t); }
 } else if (s.phase === 'mining') { const mp = (currentTime - s.mineStart)/5000; CTX.strokeStyle = s.spec.color; CTX.beginPath();
 CTX.arc(cx+tp_px.x, cy+tp_px.y, 8+Math.sin(mp*15)*4, 0, 6.28); CTX.stroke(); if(mp>=1) { s.phase='return'; s.progress=0; s.lastTick=currentTime; s.startPos={x:tp_au.x, y:tp_au.y}; const res=(t.res&&t.res.length)?t.res[0]:"Rock"; s.cargoAmount=(s.spec.bonus&&s.spec.bonus.includes(res))?s.spec.cargo*1.5:s.spec.cargo; s.cargoItem=res; }
 } else if (s.phase === 'return') { const mp_au = getOrbitalPos(base, time, 1.0);
@@ -2880,8 +2879,32 @@ function craftComponent(k, s) { if(STATE.power.gridStatus==='BLACKOUT') return l
 for(let r in c.cost) { if (STATE.inventory[r]!==undefined) STATE.inventory[r]-=c.cost[r]; else STATE.components[r]-=c.cost[r]; } if (k === 'battery') { createBattery('inventory'); log(`FACTORY: Battery created.`);
 } else { STATE.components[k]++; log(`FACTORY: ${c.name} created.`); } renderFactory(); updateUI(); actionSave(); }
 
-function launch(t, c, s) { if(STATE.power.gridStatus==='BLACKOUT') return; if(!useStamina(s)) return; STATE.inventory["Rocket Fuel"]-=c; STATE.hangar[t]--; const b = STATE.bodies.find(x=>x.type==="BASE"); const d = Math.abs(STATE.selectedObj.dist-b.dist)+0.2;
-STATE.ships.push({ type:t, spec:SPECS[t], targetId:STATE.selectedObj.id, phase:'outbound', duration:d/(BASE_SPEED*SPECS[t].speed), progress:0, lastTick:now(), startPos:getOrbitalPos(b,now()*ORBIT_CALC_FACTOR,1.0), cargoItem:null, cargoAmount:0 }); log(`CMD: ${t} launched.`); closeModal(null, true); updateUI(); actionSave(); }
+async function launch(t, c, s) {
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+if (STATE.power.gridStatus === 'BLACKOUT') return log('ERR: NO POWER. Launch blocked.');
+if (!STATE.selectedObj) return log('ERR: No target selected.');
+const b = STATE.bodies.find(x => x.type === 'BASE');
+const startPos = b ? getOrbitalPos(b, now() * ORBIT_CALC_FACTOR, 1.0) : { x: 0, y: 0 };
+log(`CMD: Requesting ${t.toUpperCase()} launch...`);
+try {
+const res = await fetch(`${API_URL}/game/launch-ship`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ shipType: t, targetId: STATE.selectedObj.id, startPos, clientTime: now() })
+});
+const data = await res.json();
+if (!res.ok) return log(`CMD ERR: ${data.msg || 'Launch failed.'}`);
+STATE.inventory = data.inventory;
+STATE.hangar = data.hangar;
+STATE.stamina = data.stamina;
+STATE.ships = data.ships;
+log(`CMD: ${t.toUpperCase()} launched to ${STATE.selectedObj.name}.`);
+closeModal(null, true);
+updateUI();
+} catch(e) {
+log(`CMD ERR: Launch request failed — ${e.message}`);
+}
+}
 
 function startBuild(t, s) { if(STATE.power.gridStatus==='BLACKOUT') return log("ERR: NO POWER."); if(!useStamina(s)) return; const sp = SPECS[t]; let ok=true;
 if (t==='probe') { if((STATE.inventory["Iron Ore"]||0)<sp.cost["Iron Ore"] || STATE.inventory.Si<sp.cost.Si) ok=false; } else { for(let p in sp.cost) if(STATE.components[p]<sp.cost[p]) ok=false;
@@ -2894,6 +2917,31 @@ j.progress += dt * 1000; if (j.progress >= j.totalDuration) { STATE.hangar[j.typ
 
 function scanBody(b) { b.scanned = true; const r = Math.random(); if (b.type === "Asteroid") { if (r>0.7) b.res=["Iron Ore"];
 else if(r>0.5) b.res=["Si"]; else if(r>0.3) b.res=["Ice water"]; else if(r>0.1) b.res=["Pt"]; else b.res=[]; } log(`DATA: ${b.name} scanned.`); updateUI(); }
+
+async function completeScan(ship, target) {
+if (!AUTH_TOKEN) { ship._scanPending = false; log('ERR: Not authenticated.'); return; }
+log(`CMD: Probe scan complete. Sending data to server...`);
+try {
+const res = await fetch(`${API_URL}/game/complete-scan`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ targetId: target.id, clientTime: now() })
+});
+const data = await res.json();
+if (!res.ok) {
+ship._scanPending = false;
+return log(`SCAN ERR: ${data.msg || 'Server error.'}`);
+}
+STATE.ships = data.ships;
+STATE.bodies = data.bodies;
+log(`DATA: ${target.name} scanned. Data acquired. Returning.`);
+updateUI();
+actionSave();
+} catch(e) {
+ship._scanPending = false;
+log(`SCAN ERR: Request failed — ${e.message}`);
+}
+}
 
 function drainBuffer(a) { let td=a; for(let b of STATE.power.batteries.filter(x=>x.loc==='grid')){ if(td<=0)break; if(b.charge>0){ let t=Math.min(b.charge,td); b.charge-=t; td-=t; }} }
 
