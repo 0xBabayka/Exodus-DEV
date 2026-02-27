@@ -768,7 +768,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--xp); font-weight:bold;">SCAVENGING LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buyLicense()">BUY (200 SCRAP)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buyLicense()">BUY (1 DATA CORE)</button>
 </div>
 
 </div>
@@ -2748,10 +2748,24 @@ getOrbitalPos(t, time, 1.0) : {x:0,y:0}; const tp_px = {x: tp_au.x * z, y: tp_au
 if (!t && s.phase !== 'return') { s.phase = 'return'; s.startTime = currentTime; s.startPos = s.lastPos || getOrbitalPos(base, time, 1.0);
 }
 if (s.phase === 'outbound') { s.progress += ((currentTime - s.lastTick)/1000)/s.duration; s.lastTick=currentTime;
-if(s.progress>=1) { if(s.type==='probe'){ scanBody(t); s.phase = 'return'; s.progress = 0; s.lastTick = currentTime; s.startPos = {x: tp_au.x, y: tp_au.y};
-s.cargoAmount = 0; s.cargoItem = null; log(`CMD: Probe reached ${t.name}. Scanning complete. Returning.`); } else { s.phase='mining'; s.mineStart=currentTime; }
+if(s.progress>=1) { if(s.type==='probe'){ s.phase = 'scanning'; s.scanStart = currentTime; log(`CMD: Probe reached ${t.name}. Scanning initiated. ETA: 25 min.`); } else { s.phase='mining'; s.mineStart=currentTime; }
 } else { const pos_au = interpolate(s.startPos, tp_au, s.progress); s.lastPos = pos_au;
 const pos_px = {x: pos_au.x * z, y: pos_au.y * z}; drawShip(cx, cy, pos_px, tp_px, s); }
+} else if (s.phase === 'scanning') {
+// Фаза сканирования: 25 минут = 1 500 000 мс. Зонд висит у цели, отображается пульсирующая дуга прогресса.
+// scanStart сохраняется в STATE.ships — переживает сохранение/загрузку и офлайн-время.
+const SCAN_MS = 25 * 60 * 1000;
+const sp = s.scanStart ? Math.min(1, (currentTime - s.scanStart) / SCAN_MS) : 1;
+CTX.save();
+CTX.strokeStyle = s.spec.color;
+CTX.lineWidth = 1;
+CTX.globalAlpha = 0.35 + Math.abs(Math.sin(currentTime / 400)) * 0.35;
+CTX.beginPath(); CTX.arc(cx + tp_px.x, cy + tp_px.y, 12 + Math.sin(currentTime / 250) * 3, 0, Math.PI * 2); CTX.stroke();
+CTX.globalAlpha = 0.9; CTX.lineWidth = 1.5;
+CTX.beginPath(); CTX.arc(cx + tp_px.x, cy + tp_px.y, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * sp); CTX.stroke();
+CTX.restore();
+if(sp >= 1) { scanBody(t); s.phase = 'return'; s.progress = 0; s.lastTick = currentTime; s.startPos = {x: tp_au.x, y: tp_au.y};
+s.cargoAmount = 0; s.cargoItem = null; log(`CMD: ${t.name} scan complete. Data acquired. Returning.`); }
 } else if (s.phase === 'mining') { const mp = (currentTime - s.mineStart)/5000; CTX.strokeStyle = s.spec.color; CTX.beginPath();
 CTX.arc(cx+tp_px.x, cy+tp_px.y, 8+Math.sin(mp*15)*4, 0, 6.28); CTX.stroke(); if(mp>=1) { s.phase='return'; s.progress=0; s.lastTick=currentTime; s.startPos={x:tp_au.x, y:tp_au.y}; const res=(t.res&&t.res.length)?t.res[0]:"Rock"; s.cargoAmount=(s.spec.bonus&&s.spec.bonus.includes(res))?s.spec.cargo*1.5:s.spec.cargo; s.cargoItem=res; }
 } else if (s.phase === 'return') { const mp_au = getOrbitalPos(base, time, 1.0);
@@ -3465,6 +3479,14 @@ pClass = "st-mining";
 let mined = now() - s.mineStart;
 let rem = Math.max(0, 5000 - mined);
 statusStr = `MINING ${(rem/1000).toFixed(1)}s`;
+} else if (s.phase === 'scanning') {
+// Фаза сканирования: 25 минут обратный отсчёт
+pClass = "st-mining";
+const SCAN_DURATION_MS = 25 * 60 * 1000;
+let remMs = s.scanStart ? Math.max(0, SCAN_DURATION_MS - (now() - s.scanStart)) : 0;
+let sm = Math.floor(remMs / 60000);
+let ssec = Math.floor((remMs % 60000) / 1000);
+statusStr = `SCAN ${sm}:${ssec<10?'0':''}${ssec}`;
 } else {
 // Outbound or Return
 let dur = s.duration; // in seconds
@@ -3516,7 +3538,7 @@ console.error("UI ERR:", e);
 // --- NEW P2P MARKET LOGIC (FIXED: NOW CONNECTS TO API) ---
 
 async function buyLicense() {
-if ((STATE.inventory.Scrap || 0) < 200) return log("MARKET: Insufficient Scrap (Need 200).");
+if ((STATE.inventory['Data Core'] || 0) < 1) return log("MARKET: Insufficient Data Core (Need 1).");
 try {
 const res = await fetch(`${API_URL}/market/license`, {
 method: 'POST',
