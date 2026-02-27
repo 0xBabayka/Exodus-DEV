@@ -2769,8 +2769,15 @@ if(sp >= 1 && !s._scanPending) { s._scanPending = true; completeScan(s, t); }
 CTX.arc(cx+tp_px.x, cy+tp_px.y, 8+Math.sin(mp*15)*4, 0, 6.28); CTX.stroke(); if(mp>=1) { s.phase='return'; s.progress=0; s.lastTick=currentTime; s.startPos={x:tp_au.x, y:tp_au.y}; const res=(t.res&&t.res.length)?t.res[0]:"Rock"; s.cargoAmount=(s.spec.bonus&&s.spec.bonus.includes(res))?s.spec.cargo*1.5:s.spec.cargo; s.cargoItem=res; }
 } else if (s.phase === 'return') { const mp_au = getOrbitalPos(base, time, 1.0);
 const mp_px = {x: mp_au.x * z, y: mp_au.y * z}; s.progress += ((currentTime - s.lastTick)/1000)/s.duration; s.lastTick=currentTime;
-if(s.progress>=1) { if (s.cargoItem) { STATE.inventory[s.cargoItem]=(STATE.inventory[s.cargoItem]||0)+s.cargoAmount; log(`LOG: ${s.type} returned with ${Math.floor(s.cargoAmount)} ${s.cargoItem}`); } else { log(`LOG: ${s.type} returned to Base.`);
-} STATE.hangar[s.type]++; STATE.ships.splice(i,1); updateUI(); actionSave();
+if(s.progress>=1) {
+if (s.type === 'probe') {
+// Probe arrival is server-authoritative
+if (!s._arrivePending) { s._arrivePending = true; probeArrive(s); }
+} else {
+// Non-probe ships: client-side arrival (miner / hauler / gas)
+if (s.cargoItem) { STATE.inventory[s.cargoItem]=(STATE.inventory[s.cargoItem]||0)+s.cargoAmount; log(`LOG: ${s.type} returned with ${Math.floor(s.cargoAmount)} ${s.cargoItem}`); } else { log(`LOG: ${s.type} returned to Base.`); }
+STATE.hangar[s.type]++; STATE.ships.splice(i,1); updateUI(); actionSave();
+}
 } else { const pos_au = interpolate(s.startPos, mp_au, s.progress); const pos_px = {x: pos_au.x * z, y: pos_au.y * z};
 drawShip(cx, cy, pos_px, mp_px, s); } }
 }
@@ -2943,6 +2950,37 @@ actionSave();
 } catch(e) {
 ship._scanPending = false;
 log(`SCAN ERR: Request failed — ${e.message}`);
+}
+}
+
+// --- PROBE ARRIVE: server-authoritative probe return confirmation ---
+// Called when probe return phase progress >= 1 (probe visually at base).
+// Server validates timing and removes probe from ships[], increments hangar.probe.
+// _arrivePending flag prevents duplicate calls from the rAF animation loop.
+async function probeArrive(ship) {
+if (!AUTH_TOKEN) { ship._arrivePending = false; log('ERR: Not authenticated.'); return; }
+log('CMD: Probe approaching base. Confirming arrival with server...');
+try {
+const res = await fetch(`${API_URL}/game/probe-arrive`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ targetId: ship.targetId, clientTime: now() })
+});
+const data = await res.json();
+if (!res.ok) {
+// Server rejected (too early or timing mismatch) — reset flag so loop retries later
+ship._arrivePending = false;
+return log(`PROBE ERR: ${data.msg || 'Server error.'}`);
+}
+// Server confirmed: sync STATE from authoritative response
+STATE.ships = data.ships;
+STATE.hangar = data.hangar;
+log('LOG: Probe returned to base. Hangar updated.');
+updateUI();
+actionSave();
+} catch(e) {
+ship._arrivePending = false;
+log(`PROBE ERR: Request failed — ${e.message}`);
 }
 }
 
