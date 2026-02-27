@@ -2934,7 +2934,10 @@ return log(`SCAN ERR: ${data.msg || 'Server error.'}`);
 }
 STATE.ships = data.ships;
 STATE.bodies = data.bodies;
-log(`DATA: ${target.name} scanned. Data acquired. Returning.`);
+if (data.inventory) STATE.inventory = data.inventory;
+let scanMsg = `DATA: ${target.name} scanned. Data acquired. Returning.`;
+if (data.brokenDataDrop > 0) { scanMsg += ` [+${data.brokenDataDrop} Broken Data]`; }
+log(scanMsg);
 updateUI();
 actionSave();
 } catch(e) {
