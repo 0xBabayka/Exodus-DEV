@@ -3899,12 +3899,10 @@ const sel = document.getElementById('p2p-buy-item-select');
 if(!sel) return;
 sel.innerHTML = '<option value="" disabled selected>SELECT ITEM</option>';
 const blacklist = ["Helium3", "Scavenging License"];
-// Show all known resource types (from inventory + known list)
-const knownItems = new Set([
-...Object.keys(STATE.inventory),
-'Iron','Copper','Titanium','Carbon','Silica','Scrap','Electronics','Alloy','Polymer','Crystal'
-]);
-Array.from(knownItems).sort().forEach(key => {
+// Always include Broken Data even if player has 0 (rare drop)
+const alwaysAvailable = ["Broken Data"];
+const allItems = new Set([...Object.keys(STATE.inventory), ...alwaysAvailable]);
+Array.from(allItems).sort().forEach(key => {
 if(!blacklist.includes(key)) {
 const opt = document.createElement('option');
 opt.value = key;
