@@ -1531,8 +1531,6 @@ this.item.style.top = (e.clientY - this.offsetY) + 'px'; this.item.style.transfo
 stopDrag: function() { this.item = null; saveUIState(); }
 };
 
-const COMPONENTS = {}; // Removed old components as requested
-
 const SPECS = {
 probe:  { speed: 3.0, fuel: 0.2, cargo: 0,   color: '#00ffaa', buildTime: 2000, cost: {"Iron Ore":10, Si:5}, name: "Probe", desc: "Scanner" },
 miner:  { speed: 1.0, fuel: 1.0, cargo: 50,  color: '#0099ff', buildTime: 5000, cost: { hull:1, engine:1, electronics:1 }, name: "Miner", bonus: ['Iron Ore', 'Si', 'Steel'] },
@@ -2971,9 +2969,6 @@ extraInfo = `<div style="margin-top:2px; display:flex; justify-content:space-bet
 } html += `</div>`; c.innerHTML = html;
 }
 
-function craftComponent(k, s) { if(STATE.power.gridStatus==='BLACKOUT') return log("ERR: NO POWER."); if(!useStamina(s)) return; const c = COMPONENTS[k];
-for(let r in c.cost) { if (STATE.inventory[r]!==undefined) STATE.inventory[r]-=c.cost[r]; else STATE.components[r]-=c.cost[r]; } if (k === 'battery') { createBattery('inventory'); log(`FACTORY: Battery created.`);
-} else { STATE.components[k]++; log(`FACTORY: ${c.name} created.`); } renderFactory(); updateUI(); actionSave(); }
 
 async function launch(t, c, s) {
 if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
