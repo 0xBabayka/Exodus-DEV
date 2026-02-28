@@ -805,6 +805,32 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div class="header" style="background:transparent; border:none; padding:0; margin-bottom:5px;">GALACTIC EXCHANGE SELL LISTINGS</div>
 <div id="p2p-public-offers" class="scan-overlay" style="height:220px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); padding:5px;"></div>
 </div>
+
+<!-- BATTERY SELL SECTION -->
+<div style="margin-top:14px; border-top:1px solid rgba(0,229,255,0.25); padding-top:12px;">
+<div style="color:var(--neon); font-weight:bold; font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">⚡ LIST WAREHOUSE BATTERY (WEAR ≤1%, CHARGE ≥99%)</div>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+<div style="border:1px solid rgba(0,229,255,0.2); padding:10px; background:rgba(0,229,255,0.03);">
+<div class="mkt-input-group">
+<select id="p2p-battery-select" class="mkt-input" style="flex:2;"></select>
+</div>
+<div id="p2p-battery-info" style="font-size:9px; color:#778; margin-bottom:6px; min-height:14px;"></div>
+<div class="mkt-input-group">
+<input type="number" id="p2p-battery-price" class="mkt-input" placeholder="PRICE ($H3)" min="1">
+<button class="nav-btn" onclick="postBatteryOffer()" style="border-color:var(--neon); color:var(--neon);">LIST</button>
+</div>
+<div style="font-size:9px; color:#556; margin-top:3px;">Fee: 5%. Battery must be in Global Warehouse.</div>
+</div>
+<div style="border:1px solid rgba(0,229,255,0.2); padding:10px; background:rgba(0,229,255,0.03); height:110px; overflow-y:auto;">
+<div style="color:var(--neon); font-size:9px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">MY BATTERY LISTINGS</div>
+<div id="p2p-my-battery-offers"></div>
+</div>
+</div>
+<div style="margin-top:10px;">
+<div style="color:var(--neon); font-size:9px; font-weight:bold; text-transform:uppercase; margin-bottom:5px;">⚡ BATTERY SELL LISTINGS</div>
+<div id="p2p-public-battery-offers" class="scan-overlay" style="height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(0,229,255,0.2); padding:5px;"></div>
+</div>
+</div>
 </div>
 
 <!-- BUY SUB-TAB -->
@@ -830,6 +856,30 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="margin-top:15px;">
 <div class="header" style="background:transparent; border:none; padding:0; margin-bottom:5px; color:#ffd700;">ACTIVE BUY ORDERS</div>
 <div id="p2p-public-buy-orders" class="scan-overlay" style="height:220px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(255,215,0,0.15); padding:5px;"></div>
+</div>
+
+<!-- BATTERY BUY ORDER SECTION -->
+<div style="margin-top:14px; border-top:1px solid rgba(255,215,0,0.25); padding-top:12px;">
+<div style="color:#ffd700; font-weight:bold; font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">⚡ BATTERY BUY ORDERS (WEAR ≤1%, CHARGE ≥99%)</div>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+<div style="border:1px solid rgba(255,215,0,0.2); padding:10px; background:rgba(255,215,0,0.03);">
+<div style="color:#ffd700; font-size:9px; font-weight:bold; margin-bottom:8px; text-transform:uppercase;">CREATE BATTERY BUY ORDER</div>
+<div class="mkt-input-group">
+<input type="number" id="p2p-bat-buy-qty" class="mkt-input" placeholder="QTY" min="1" value="1" style="flex:1;">
+<input type="number" id="p2p-bat-buy-price" class="mkt-input" placeholder="TOTAL PRICE ($H3)" min="1" style="flex:2;">
+</div>
+<button class="nav-btn" onclick="postBatteryBuyOrder()" style="border-color:#ffd700; color:#ffd700; width:100%;">POST BUY ORDER</button>
+<div style="font-size:9px; color:#888; margin-top:5px;">$H3 locked until filled or cancelled.</div>
+</div>
+<div style="border:1px solid rgba(255,215,0,0.2); padding:10px; background:rgba(255,215,0,0.03); height:110px; overflow-y:auto;">
+<div style="color:#ffd700; font-size:9px; font-weight:bold; margin-bottom:6px; text-transform:uppercase;">MY BATTERY BUY ORDERS</div>
+<div id="p2p-my-battery-buy-orders"></div>
+</div>
+</div>
+<div style="margin-top:10px;">
+<div style="color:#ffd700; font-size:9px; font-weight:bold; text-transform:uppercase; margin-bottom:5px;">⚡ ACTIVE BATTERY BUY ORDERS</div>
+<div id="p2p-public-battery-buy-orders" class="scan-overlay" style="height:160px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid rgba(255,215,0,0.15); padding:5px;"></div>
+</div>
 </div>
 </div>
 </div>
@@ -3675,15 +3725,19 @@ function initMarket() {
 if(!STATE.market) STATE.market = {};
 if(!STATE.market.offers) STATE.market.offers = [];
 if(!STATE.market.buyOrders) STATE.market.buyOrders = [];
+if(!STATE.market.batteryOffers) STATE.market.batteryOffers = [];
+if(!STATE.market.batteryBuyOrders) STATE.market.batteryBuyOrders = [];
 // Load offers from server on init
 loadMarketData();
 }
 
 async function loadMarketData() {
 try {
-const [resOffers, resBuy] = await Promise.all([
+const [resOffers, resBuy, resBatOffers, resBatBuy] = await Promise.all([
 fetch(`${API_URL}/market`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
-fetch(`${API_URL}/market/buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } })
+fetch(`${API_URL}/market/buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
+fetch(`${API_URL}/market/battery-offers`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
+fetch(`${API_URL}/market/battery-buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } })
 ]);
 const dataOffers = await resOffers.json();
 if(!resOffers.ok) throw new Error(dataOffers.msg || "DATA LOAD ERROR");
@@ -3693,9 +3747,19 @@ if(resBuy.ok) {
 const dataBuy = await resBuy.json();
 STATE.market.buyOrders = dataBuy.buyOrders || [];
 }
+if(resBatOffers.ok) {
+const dataBatOffers = await resBatOffers.json();
+STATE.market.batteryOffers = dataBatOffers.batteryOffers || [];
+}
+if(resBatBuy.ok) {
+const dataBatBuy = await resBatBuy.json();
+STATE.market.batteryBuyOrders = dataBatBuy.batteryBuyOrders || [];
+}
 
 renderP2PMarket();
 renderBuyOrdersTab();
+renderBatteryOffers();
+renderBatteryBuyOrders();
 } catch(e) {
 console.error("MKT LOAD ERR:", e);
 }
@@ -3731,9 +3795,12 @@ STATE.uiTabs.p2pSub = sub;
 if(sub === 'buy') {
 populateBuyOrderSelect();
 renderBuyOrdersTab();
+renderBatteryBuyOrders();
 } else {
 populateP2PSelect();
 renderP2PMarket();
+populateBatterySelect();
+renderBatteryOffers();
 }
 }
 
@@ -4092,6 +4159,305 @@ input.value = '';
 // Clear any previous error
 const errEl = document.getElementById(`chat-err-${channel}`);
 if (errEl) errEl.innerText = '';
+}
+
+// =============================================================================
+// --- BATTERY P2P MARKET FUNCTIONS ---
+// =============================================================================
+
+const BATTERY_SELL_CAP = 33.33;
+const BATTERY_SELL_FULL_THRESHOLD = 33;  // charge >= 33 ≈ 99%
+const BATTERY_SELL_MAX_WEAR = 1;          // wear <= 1%
+
+function getEligibleWarehouseBatteries() {
+const bats = (STATE.power && Array.isArray(STATE.power.batteries)) ? STATE.power.batteries : [];
+return bats.filter(b =>
+b.loc === 'warehouse' &&
+typeof b.wear === 'number' && b.wear <= BATTERY_SELL_MAX_WEAR &&
+typeof b.charge === 'number' && b.charge >= BATTERY_SELL_FULL_THRESHOLD
+);
+}
+
+function populateBatterySelect() {
+const sel = document.getElementById('p2p-battery-select');
+if (!sel) return;
+sel.innerHTML = '<option value="" disabled selected>SELECT WAREHOUSE BATTERY</option>';
+const eligible = getEligibleWarehouseBatteries();
+if (eligible.length === 0) {
+const opt = document.createElement('option');
+opt.disabled = true;
+opt.innerText = '— No eligible batteries in warehouse —';
+sel.appendChild(opt);
+} else {
+eligible.forEach(b => {
+const opt = document.createElement('option');
+opt.value = b.id;
+const chargePct = Math.floor((b.charge / BATTERY_SELL_CAP) * 100);
+opt.innerText = `BAT-${b.id}  ${chargePct}% chg | ${(b.wear || 0).toFixed(2)}% wear`;
+sel.appendChild(opt);
+});
+}
+updateBatterySelectInfo();
+}
+
+function updateBatterySelectInfo() {
+const sel = document.getElementById('p2p-battery-select');
+const info = document.getElementById('p2p-battery-info');
+if (!sel || !info) return;
+const batId = sel.value;
+if (!batId) { info.innerText = ''; return; }
+const bats = (STATE.power && Array.isArray(STATE.power.batteries)) ? STATE.power.batteries : [];
+const bat = bats.find(b => b.id === batId);
+if (!bat) { info.innerText = ''; return; }
+const chargePct = Math.floor((bat.charge / BATTERY_SELL_CAP) * 100);
+info.innerText = `Charge: ${chargePct}%  |  Wear: ${(bat.wear || 0).toFixed(2)}%  |  Loc: ${bat.loc}`;
+info.style.color = '#7af';
+}
+
+async function postBatteryOffer() {
+const batteryId = document.getElementById('p2p-battery-select').value;
+const price = parseInt(document.getElementById('p2p-battery-price').value);
+
+if (!batteryId) return log("MKT: Select a warehouse battery.");
+if (!price || price < 1) return log("MKT: Invalid price.");
+
+log("MKT: Listing battery...");
+try {
+const res = await fetch(`${API_URL}/market/battery-offer`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ batteryId, price })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "POST FAILED");
+
+if (data.batteries) STATE.power.batteries = data.batteries;
+STATE.market.batteryOffers = data.batteryOffers || [];
+log(`MKT: Battery BAT-${batteryId} listed for ${price} $H3.`);
+populateBatterySelect();
+renderBatteryOffers();
+updateUI();
+document.getElementById('p2p-battery-price').value = '';
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+async function cancelBatteryOffer(offerId) {
+try {
+const res = await fetch(`${API_URL}/market/battery-offer/cancel`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ offerId })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "CANCEL FAILED");
+
+if (data.batteries) STATE.power.batteries = data.batteries;
+STATE.market.batteryOffers = data.batteryOffers || [];
+log("MKT: Battery listing cancelled. Battery returned to Warehouse.");
+populateBatterySelect();
+renderBatteryOffers();
+updateUI();
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+async function buyBatteryOffer(offerId) {
+try {
+const res = await fetch(`${API_URL}/market/battery-offer/buy`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ offerId })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "BUY FAILED");
+
+if (data.inventory) STATE.inventory = data.inventory;
+if (data.batteries) STATE.power.batteries = data.batteries;
+STATE.market.batteryOffers = data.batteryOffers || [];
+log("MKT: Battery purchased! Added to your Warehouse.");
+renderBatteryOffers();
+updateUI();
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+function renderBatteryOffers() {
+const myDiv = document.getElementById('p2p-my-battery-offers');
+const pubDiv = document.getElementById('p2p-public-battery-offers');
+if (!myDiv || !pubDiv) return;
+
+let myHTML = '';
+let pubHTML = '';
+
+const offers = Array.isArray(STATE.market.batteryOffers) ? STATE.market.batteryOffers : [];
+offers.forEach(o => {
+const chargePct = Math.floor((o.batteryCharge / BATTERY_SELL_CAP) * 100);
+const wearStr = (o.batteryWear || 0).toFixed(2);
+const isMine = o.isMine;
+const card = `<div class="mkt-offer-card" style="border-color:rgba(0,229,255,0.3); background:rgba(0,229,255,0.04);">
+<div>
+<div style="color:${isMine ? 'var(--neon)' : '#fff'}; font-weight:bold;">⚡ FULL BATTERY</div>
+<div style="font-size:9px; color:#667;">Seller: ${isMine ? 'YOU' : (o.seller || 'Unknown')}</div>
+<div style="font-size:9px; color:#556;">Charge: ${chargePct}% | Wear: ${wearStr}%</div>
+</div>
+<div style="text-align:right;">
+<div style="color:var(--warning); font-weight:bold; font-size:11px;">${o.price} $H3</div>
+${isMine
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelBatteryOffer('${o.id}')">CANCEL</button>`
+: `<button class="nav-btn" style="padding:1px 5px; font-size:9px; margin-top:2px; border-color:var(--neon); color:var(--neon);" onclick="buyBatteryOffer('${o.id}')">BUY</button>`
+}
+</div>
+</div>`;
+if (isMine) myHTML += card;
+else pubHTML += card;
+});
+
+myDiv.innerHTML = myHTML || '<div style="color:#445; text-align:center; padding:8px; font-size:9px;">NO ACTIVE LISTINGS</div>';
+pubDiv.innerHTML = pubHTML || '<div style="color:#445; text-align:center; padding:10px;">NO BATTERY LISTINGS FOUND</div>';
+}
+
+// --- BATTERY BUY ORDERS ---
+
+async function postBatteryBuyOrder() {
+const qty = parseInt(document.getElementById('p2p-bat-buy-qty').value);
+const price = parseInt(document.getElementById('p2p-bat-buy-price').value);
+
+if (!qty || qty < 1) return log("MKT: Invalid quantity.");
+if (!price || price < 1) return log("MKT: Invalid price.");
+if ((STATE.inventory['Helium3'] || 0) < price) return log("MKT: Insufficient $H3 to lock.");
+
+log("MKT: Posting battery buy order...");
+try {
+const res = await fetch(`${API_URL}/market/battery-buy-order`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ qty, price })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "POST FAILED");
+
+STATE.inventory = data.inventory;
+STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
+log(`MKT: Battery buy order posted: ${qty}x for ${price} $H3 total.`);
+renderBatteryBuyOrders();
+updateUI();
+document.getElementById('p2p-bat-buy-qty').value = 1;
+document.getElementById('p2p-bat-buy-price').value = '';
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+async function cancelBatteryBuyOrder(orderId) {
+try {
+const res = await fetch(`${API_URL}/market/battery-buy-order/cancel`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ orderId })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "CANCEL FAILED");
+
+STATE.inventory = data.inventory;
+STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
+log("MKT: Battery buy order cancelled. $H3 refunded.");
+renderBatteryBuyOrders();
+updateUI();
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+async function fillBatteryBuyOrder(orderId) {
+const selEl = document.getElementById(`bat-fill-select-${orderId}`);
+const batteryId = selEl ? selEl.value : '';
+if (!batteryId) return log("MKT: Select a warehouse battery to fill with.");
+
+try {
+const res = await fetch(`${API_URL}/market/battery-buy-order/fill`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ orderId, batteryId })
+});
+const data = await res.json();
+if (!res.ok) throw new Error(data.msg || "FILL FAILED");
+
+STATE.inventory = data.inventory;
+if (data.batteries) STATE.power.batteries = data.batteries;
+STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
+log("MKT: Battery buy order filled. $H3 received.");
+populateBatterySelect();
+renderBatteryBuyOrders();
+updateUI();
+actionSave();
+} catch(e) {
+log(`MKT ERR: ${e.message}`);
+}
+}
+
+function renderBatteryBuyOrders() {
+const myDiv = document.getElementById('p2p-my-battery-buy-orders');
+const pubDiv = document.getElementById('p2p-public-battery-buy-orders');
+if (!myDiv || !pubDiv) return;
+
+let myHTML = '';
+let pubHTML = '';
+
+const orders = Array.isArray(STATE.market.batteryBuyOrders) ? STATE.market.batteryBuyOrders : [];
+const eligibleBats = getEligibleWarehouseBatteries();
+
+orders.forEach(o => {
+const isMine = o.isMine;
+const remaining = o.qty || 0;
+const pricePerUnit = remaining > 0 ? o.pricePerUnit : 0;
+
+// Для чужих ордеров показываем выпадающий список батарей из warehouse
+let fillHtml = '';
+if (!isMine) {
+if (eligibleBats.length > 0) {
+const opts = eligibleBats.map(b => {
+const cp = Math.floor((b.charge / BATTERY_SELL_CAP) * 100);
+return `<option value="${b.id}">BAT-${b.id} (${cp}% | ${(b.wear||0).toFixed(2)}%w)</option>`;
+}).join('');
+fillHtml = `<div style="display:flex; gap:4px; margin-top:3px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
+<select id="bat-fill-select-${o.id}" style="background:rgba(0,0,0,0.4); border:1px solid #554; color:#fff; font-family:monospace; font-size:8px; padding:2px; max-width:130px;">${opts}</select>
+<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:#ffd700; color:#ffd700;" onclick="fillBatteryBuyOrder('${o.id}')">FILL</button>
+</div>`;
+} else {
+fillHtml = `<div style="font-size:9px; color:#554; margin-top:3px;">No eligible batteries</div>`;
+}
+}
+
+const card = `<div class="mkt-offer-card" style="border-color:rgba(255,215,0,0.3); background:rgba(255,215,0,0.04);">
+<div>
+<div style="color:${isMine ? '#ffd700' : '#fff'}; font-weight:bold;">⚡ FULL BATTERY x${remaining}</div>
+<div style="font-size:9px; color:#667;">Buyer: ${isMine ? 'YOU' : (o.buyer || 'Unknown')}</div>
+<div style="font-size:9px; color:#556;">${pricePerUnit} $H3/ea (wear ≤1%)</div>
+</div>
+<div style="text-align:right;">
+<div style="color:#ffd700; font-weight:bold; font-size:11px;">${o.price} $H3</div>
+${isMine
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelBatteryBuyOrder('${o.id}')">CANCEL</button>`
+: fillHtml
+}
+</div>
+</div>`;
+
+if (isMine) myHTML += card;
+else pubHTML += card;
+});
+
+myDiv.innerHTML = myHTML || '<div style="color:#445; text-align:center; padding:8px; font-size:9px;">NO ACTIVE ORDERS</div>';
+pubDiv.innerHTML = pubHTML || '<div style="color:#445; text-align:center; padding:10px;">NO BATTERY BUY ORDERS FOUND</div>';
 }
 
 // --- INIT ---
