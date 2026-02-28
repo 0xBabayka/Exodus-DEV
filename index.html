@@ -259,6 +259,20 @@ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
 background: #0b1016; border: 1px solid var(--neon); width: 650px; padding: 20px;
 box-shadow: 0 0 50px rgba(0, 229, 255, 0.15); z-index: 2001;
 }
+/* Resizable Galactic Market window */
+#modal-market {
+resize: both;
+overflow: auto;
+min-width: 500px; min-height: 300px;
+max-width: 98vw; max-height: 92vh;
+box-sizing: border-box;
+}
+#modal-market::after {
+content: "⤡";
+position: absolute; bottom: 4px; right: 6px;
+font-size: 10px; color: rgba(255,215,0,0.3); pointer-events: none;
+line-height: 1; font-family: monospace;
+}
 
 .tab-btn {
 background: transparent; border: none; border-bottom: 2px solid transparent;
