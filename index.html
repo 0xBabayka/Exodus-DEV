@@ -1623,8 +1623,8 @@ greenhouse: { slots: Array(6).fill(null).map((_, i) => ({ id: i, status: 'empty'
 composter: { slots: [{id:0, active:false, startTime:0, duration:0}, {id:1, active:false, startTime:0, duration:0}, {id:2, active:false, startTime:0, duration:0}] },
 lastDailyClaim: 0,
 dailyMission: null, // Добавлено для миссий
-iceHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000 },
-regolithHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000 },
+iceHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null },
+regolithHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null },
 market: { offers: [] }, // MARKET INITIALIZATION
 uiTabs: { base: 'refinery', market: 'sys', missions: 'ground' },
 activeModal: null,
@@ -1946,8 +1946,11 @@ if (!STATE.refinery.sabatierSlots) STATE.refinery.sabatierSlots = [{ id: 0, acti
 if (!STATE.fuelFactory) STATE.fuelFactory = { slots: Array(4).fill(null).map((_,i)=>({id:i, active:false, mode:null, startTime:0, duration:0}))};
 if (!STATE.kitchen) STATE.kitchen = { roasterSlots: [{id:0,active:false},{id:1,active:false}], grinderSlots: [{id:0,active:false},{id:1,active:false}], brewerSlots: [{id:0,active:false},{id:1,active:false}] };
 if (!STATE.uiTabs) STATE.uiTabs = { base: 'refinery', market: 'sys', missions: 'ground' };
-if (STATE.iceHarvester === undefined) STATE.iceHarvester = { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000 };
-if (STATE.regolithHarvester === undefined) STATE.regolithHarvester = { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000 };
+if (STATE.iceHarvester === undefined) STATE.iceHarvester = { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null };
+if (STATE.regolithHarvester === undefined) STATE.regolithHarvester = { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null };
+// Backward compat: add batterySlot to existing saves that don't have it
+if (STATE.iceHarvester && typeof STATE.iceHarvester === 'object' && !Object.prototype.hasOwnProperty.call(STATE.iceHarvester, 'batterySlot')) STATE.iceHarvester.batterySlot = null;
+if (STATE.regolithHarvester && typeof STATE.regolithHarvester === 'object' && !Object.prototype.hasOwnProperty.call(STATE.regolithHarvester, 'batterySlot')) STATE.regolithHarvester.batterySlot = null;
 }
 
 function restoreOfflineProgress(lastTime) {
@@ -2636,9 +2639,21 @@ amt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory.PVC = (STATE.inven
 msg = `CHEM: Synthesized ${amt} Perchlorate`; STATE.inventory.Perchlorate = (STATE.inventory.Perchlorate || 0) + amt; xp = 18;
 } else if (s.mode === 'pla') { let amt = Math.floor(Math.random() * (10 - 5 + 1)) + 5;
 msg = `CHEM: Synthesized ${amt} PLA`; STATE.inventory.PLA = (STATE.inventory.PLA || 0) + amt; xp = 12;
-} else if (s.mode === 'empty_battery') { let amt = 1; msg = `CHEM: Assembled 1 Empty Battery`;
-if (lucky) { let bonus = Math.floor(Math.random() * 2) + 1; amt += bonus; msg += ` (+${bonus} Bonus!)`;
-} STATE.inventory["Empty Battery"] = (STATE.inventory["Empty Battery"] || 0) + amt; xp = 10;
+} else if (s.mode === 'empty_battery') { let amt = 1;
+if (lucky) { let bonus = Math.floor(Math.random() * 2) + 1; amt += bonus; msg = `CHEM: Power Cell synthesis complete (+${bonus} Bonus!)`; } else { msg = `CHEM: Power Cell synthesis complete`; }
+xp = 10;
+(function(amount) {
+if (!AUTH_TOKEN) { log('CHEM ERR: Not authenticated. Power Cell not saved.'); return; }
+fetch(`${API_URL}/game/chem/create-battery`, {
+method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ qty: amount })
+}).then(function(r) { return r.json(); }).then(function(data) {
+if (data.batteries) { STATE.power.batteries = data.batteries; }
+log(`CHEM: ${amount} Power Cell(s) placed in Stored Power Cells (Warehouse).`);
+if (document.getElementById('modal-warehouse') && document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
+updateUI();
+}).catch(function(e) { log(`CHEM ERR: ${e.message}`); });
+})(amt);
 } else if (s.mode === 'electric_silicon') { let amt = 2; msg = `CHEM: Synthesized ${amt} Electric Silicon`;
 if (lucky) { let bonus = 1; amt += bonus; msg += ` (+${bonus} Bonus!)`;
 } STATE.inventory["Electric silicon"] = (STATE.inventory["Electric silicon"] || 0) + amt; xp = 25; }
@@ -3186,6 +3201,7 @@ container.innerHTML = `
   <div style="width:100%; height:4px; background:#111; margin-bottom:8px;">
     <div id="ice-harvest-bar" style="height:100%; width:${progressPct}%; background:var(--neon); transition:width 0.5s;"></div>
   </div>
+  ${buildHarvesterBatterySlotHtml('ice', ih)}
   ${actionHtml}
 </div>
 <div style="font-size:9px; color:#445; border-top:1px solid #223; padding-top:8px;">
@@ -3286,6 +3302,7 @@ regHtml = `
   <div style="width:100%; height:4px; background:#111; margin-bottom:8px;">
     <div id="reg-harvest-bar" style="height:100%; width:${progressPct}%; background:#cc8800; transition:width 0.5s;"></div>
   </div>
+  ${buildHarvesterBatterySlotHtml('regolith', rh)}
   ${actionHtml}
 </div>
 <div style="font-size:9px; color:#445; border-top:1px solid #223; padding-top:8px; margin-top:8px;">
@@ -3302,15 +3319,162 @@ if (existingReg) {
 }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HARVESTER BATTERY SLOT SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Returns all batteries currently in the warehouse (Stored Power Cells) that have charge > 0
+function getWarehouseBatteriesForHarvester() {
+  return (STATE.power.batteries || []).filter(function(b) { return b.loc === 'warehouse' && b.charge > 0; });
+}
+
+// Install a Power Cell from warehouse into a harvester slot (calls server endpoint)
+async function installHarvesterBattery(harvesterType) {
+  var selId = 'hbat-select-' + harvesterType;
+  var sel = document.getElementById(selId);
+  if (!sel || !sel.value) { log('HARVEST-BAT: Select a Power Cell to install.'); return; }
+  var batteryId = sel.value;
+  try {
+    var res = await fetch(API_URL + '/game/harvester/install-battery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+      body: JSON.stringify({ harvesterType: harvesterType, batteryId: batteryId })
+    });
+    var data = await res.json();
+    if (!res.ok) { log('HARVEST-BAT: ' + (data.msg || 'Error installing Power Cell.')); return; }
+    // Update local state with authoritative server response
+    if (Array.isArray(data.batteries)) STATE.power.batteries = data.batteries;
+    if (data.harvester) {
+      if (harvesterType === 'ice') STATE.iceHarvester = data.harvester;
+      else STATE.regolithHarvester = data.harvester;
+    }
+    var slot = data.harvester && data.harvester.batterySlot;
+    log('HARVEST-BAT: Power Cell [' + batteryId + '] installed in ' + (harvesterType === 'ice' ? 'Ice' : 'Regolith') + ' Harvester. Uses remaining: ' + (slot ? slot.usesLeft : '?') + ' / 4.');
+    renderGroundOps();
+    updateUI();
+  } catch (e) {
+    log('HARVEST-BAT: Network error — could not install Power Cell.');
+  }
+}
+
+// Remove a Power Cell from a harvester slot and return it to Stored Power Cells (calls server endpoint)
+// Only allowed when harvester is NOT active (has returned from deployment)
+async function removeHarvesterBattery(harvesterType) {
+  try {
+    var res = await fetch(API_URL + '/game/harvester/remove-battery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+      body: JSON.stringify({ harvesterType: harvesterType })
+    });
+    var data = await res.json();
+    if (!res.ok) { log('HARVEST-BAT: ' + (data.msg || 'Error removing Power Cell.')); return; }
+    if (Array.isArray(data.batteries)) STATE.power.batteries = data.batteries;
+    if (data.harvester !== undefined) {
+      if (harvesterType === 'ice') STATE.iceHarvester = data.harvester;
+      else STATE.regolithHarvester = data.harvester;
+    }
+    log('HARVEST-BAT: Power Cell removed from ' + (harvesterType === 'ice' ? 'Ice' : 'Regolith') + ' Harvester and returned to Stored Power Cells.');
+    renderGroundOps();
+    updateUI();
+  } catch (e) {
+    log('HARVEST-BAT: Network error — could not remove Power Cell.');
+  }
+}
+
+// Build the battery slot HTML block for injection into the harvester panels
+function buildHarvesterBatterySlotHtml(harvesterType, harvester) {
+  if (!harvester) return '';
+  var slot = harvester.batterySlot || null;
+  var isActive = !!harvester.active;
+  var accentColor = (harvesterType === 'ice') ? 'var(--neon)' : '#cc8800';
+  var accentRgb   = (harvesterType === 'ice') ? '0,229,255' : '204,136,0';
+
+  if (slot) {
+    // ── Slot is OCCUPIED ──
+    var chargePct = typeof slot.charge === 'number' ? slot.charge.toFixed(2) : '??';
+    var wearPct   = typeof slot.wear   === 'number' ? slot.wear.toFixed(2)   : '??';
+    var usesLeft  = typeof slot.usesLeft === 'number' ? slot.usesLeft : '?';
+    var usesMax   = 4;
+
+    var chargeColor = (slot.charge >= 60) ? 'var(--agri)' : (slot.charge >= 20) ? 'var(--warning)' : 'var(--danger)';
+    var wearColor   = (slot.wear   <= 30) ? 'var(--agri)' : (slot.wear   <= 65) ? 'var(--warning)' : 'var(--danger)';
+    var usesColor   = (slot.usesLeft > 2) ? 'var(--agri)' : (slot.usesLeft > 0)  ? 'var(--warning)' : 'var(--danger)';
+
+    var depleted = slot.usesLeft <= 0;
+    var depletedWarning = depleted
+      ? '<div style="font-size:9px; color:var(--danger); margin-bottom:6px;">⚠ POWER CELL DEPLETED — Remove and replace with a charged cell.</div>'
+      : '';
+
+    return '<div style="margin-top:8px; margin-bottom:6px; border:1px solid rgba(' + accentRgb + ',0.35); background:rgba(' + accentRgb + ',0.04); padding:8px;">'
+      + '<div style="color:' + accentColor + '; font-size:10px; font-weight:bold; margin-bottom:6px; letter-spacing:0.5px;">🔋 POWER CELL SLOT — INSTALLED</div>'
+      + depletedWarning
+      + '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px; margin-bottom:6px;">'
+        + '<div style="background:rgba(0,0,0,0.25); padding:4px 6px; text-align:center;">'
+          + '<div style="font-size:8px; color:#667; text-transform:uppercase; letter-spacing:0.5px;">Charge</div>'
+          + '<div style="font-size:11px; color:' + chargeColor + '; font-weight:bold; font-family:monospace;">' + chargePct + '%</div>'
+        + '</div>'
+        + '<div style="background:rgba(0,0,0,0.25); padding:4px 6px; text-align:center;">'
+          + '<div style="font-size:8px; color:#667; text-transform:uppercase; letter-spacing:0.5px;">Wear</div>'
+          + '<div style="font-size:11px; color:' + wearColor + '; font-weight:bold; font-family:monospace;">' + wearPct + '%</div>'
+        + '</div>'
+        + '<div style="background:rgba(0,0,0,0.25); padding:4px 6px; text-align:center;">'
+          + '<div style="font-size:8px; color:#667; text-transform:uppercase; letter-spacing:0.5px;">Uses Left</div>'
+          + '<div style="font-size:11px; color:' + usesColor + '; font-weight:bold; font-family:monospace;">' + usesLeft + ' / ' + usesMax + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<div style="font-size:8px; color:#556; margin-bottom:6px; font-family:monospace;">ID: ' + slot.id + '</div>'
+      + '<button class="nav-btn" style="width:100%; border-color:var(--warning); color:var(--warning);"'
+        + ' onclick="removeHarvesterBattery(\'' + harvesterType + '\')"'
+        + (isActive ? ' disabled title="Cannot remove while harvester is deployed"' : '') + '>'
+        + (isActive ? '🔒 DEPLOYED — CANNOT REMOVE' : '⏏ REMOVE POWER CELL')
+      + '</button>'
+    + '</div>';
+  }
+
+  // ── Slot is EMPTY ──
+  var availBats = getWarehouseBatteriesForHarvester();
+
+  if (availBats.length === 0) {
+    return '<div style="margin-top:8px; margin-bottom:6px; border:1px solid rgba(80,80,80,0.3); background:rgba(0,0,0,0.12); padding:8px;">'
+      + '<div style="color:#777; font-size:10px; font-weight:bold; margin-bottom:4px; letter-spacing:0.5px;">🔋 POWER CELL SLOT — EMPTY</div>'
+      + '<div style="font-size:9px; color:var(--danger);">⚠ No charged Power Cells in Stored Power Cells. Charge batteries at the Power Grid first.</div>'
+    + '</div>';
+  }
+
+  var options = availBats.map(function(b) {
+    return '<option value="' + b.id + '">[' + b.id + ']  ' + b.charge.toFixed(2) + '% chg  |  ' + b.wear.toFixed(2) + '% wear</option>';
+  }).join('');
+
+  return '<div style="margin-top:8px; margin-bottom:6px; border:1px solid rgba(80,160,80,0.3); background:rgba(0,0,0,0.12); padding:8px;">'
+    + '<div style="color:#aaa; font-size:10px; font-weight:bold; margin-bottom:6px; letter-spacing:0.5px;">🔋 POWER CELL SLOT — EMPTY</div>'
+    + '<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px;">'
+      + '<select id="hbat-select-' + harvesterType + '"'
+        + ' style="flex:1; background:rgba(0,0,0,0.5); border:1px solid #446; color:#ccc;'
+        + ' font-family:monospace; font-size:9px; padding:4px 5px; min-width:0;">'
+        + options
+      + '</select>'
+      + '<button class="nav-btn" style="border-color:' + accentColor + '; color:' + accentColor + '; white-space:nowrap; flex-shrink:0;"'
+        + ' onclick="installHarvesterBattery(\'' + harvesterType + '\')">'
+        + '⬇ INSTALL'
+      + '</button>'
+    + '</div>'
+    + '<div style="font-size:9px; color:#556;">1 charged cell = 4 deployments • Wear: +0.2% per launch</div>'
+  + '</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function startIceHarvest() {
 const ih = STATE.iceHarvester;
 if (!ih) return log('HARVEST: No harvester available.');
 if (ih.active) return log('HARVEST: Already deployed.');
 if (ih.durability <= 0) return log('HARVEST: Harvester is destroyed.');
+if (!ih.batterySlot) return log('HARVEST: No Power Cell installed. Install a charged Power Cell before deploying.');
+if (ih.batterySlot.usesLeft <= 0) return log('HARVEST: Installed Power Cell is depleted. Remove it and install a charged one.');
 ih.active = true;
 ih.startTime = now();
 ih.duration = 6 * 60 * 60 * 1000;
-log('HARVEST: Ice Harvester deployed. ETA: 6h.');
+log('HARVEST: Ice Harvester deployed. ETA: 6h. Power Cell uses remaining: ' + ih.batterySlot.usesLeft + ' / 4.');
 renderGroundOps();
 updateUI(); actionSave();
 }
@@ -3323,12 +3487,25 @@ const iceYield = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
 const wear = Math.floor(Math.random() * (35 - 10 + 1)) + 10;
 STATE.inventory['Ice water'] = (STATE.inventory['Ice water'] || 0) + iceYield;
 ih.durability = Math.max(0, ih.durability - wear);
+
+// Battery: consume one use, add 0.2% wear. Battery stays in slot even if depleted.
+var batMsg = '';
+if (ih.batterySlot) {
+  ih.batterySlot.usesLeft = Math.max(0, ih.batterySlot.usesLeft - 1);
+  ih.batterySlot.wear = parseFloat(Math.min(100, ih.batterySlot.wear + 0.2).toFixed(4));
+  if (ih.batterySlot.usesLeft <= 0) {
+    ih.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
+    batMsg = ' | Power Cell DEPLETED (remove and replace).';
+  } else {
+    batMsg = ' | Power Cell uses left: ' + ih.batterySlot.usesLeft + ' / 4.';
+  }
+}
+
 if (ih.durability <= 0) {
-  // Харвестер уничтожен — полный износ
   STATE.iceHarvester = null;
-  log(`HARVEST: Complete! +${iceYield} Ice. Wear: -${wear}. [UNIT DESTROYED — Durability reached zero]`);
+  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + '.' + batMsg + ' [UNIT DESTROYED — Durability reached zero]');
 } else {
-  log(`HARVEST: Complete! +${iceYield} Ice. Wear: -${wear} (Durability: ${ih.durability}/100).`);
+  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + ' (Durability: ' + ih.durability + '/100).' + batMsg);
 }
 renderGroundOps();
 updateUI(); actionSave();
@@ -3346,7 +3523,7 @@ const toRepair = Math.min(amount, maxRepair, availScrap);
 if (toRepair < 1) return log('HARVEST: Nothing to repair or no Scrap available.');
 STATE.inventory.Scrap = (STATE.inventory.Scrap || 0) - toRepair;
 ih.durability = Math.min(100, ih.durability + toRepair);
-log(`HARVEST: Repaired +${toRepair} Durability (used ${toRepair} Scrap). Current: ${ih.durability}/100.`);
+log('HARVEST: Repaired +' + toRepair + ' Durability (used ' + toRepair + ' Scrap). Current: ' + ih.durability + '/100.');
 renderGroundOps();
 updateUI();
 }
@@ -3356,10 +3533,12 @@ const rh = STATE.regolithHarvester;
 if (!rh) return log('REG-HARVEST: No harvester available.');
 if (rh.active) return log('REG-HARVEST: Already deployed.');
 if (rh.durability <= 0) return log('REG-HARVEST: Harvester is destroyed.');
+if (!rh.batterySlot) return log('REG-HARVEST: No Power Cell installed. Install a charged Power Cell before deploying.');
+if (rh.batterySlot.usesLeft <= 0) return log('REG-HARVEST: Installed Power Cell is depleted. Remove it and install a charged one.');
 rh.active = true;
 rh.startTime = now();
 rh.duration = 6 * 60 * 60 * 1000;
-log('REG-HARVEST: Regolith Harvester deployed. ETA: 6h.');
+log('REG-HARVEST: Regolith Harvester deployed. ETA: 6h. Power Cell uses remaining: ' + rh.batterySlot.usesLeft + ' / 4.');
 renderGroundOps();
 updateUI(); actionSave();
 }
@@ -3372,11 +3551,25 @@ const regYield = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
 const wear = Math.floor(Math.random() * (35 - 15 + 1)) + 15;
 STATE.inventory['Regolith'] = (STATE.inventory['Regolith'] || 0) + regYield;
 rh.durability = Math.max(0, rh.durability - wear);
+
+// Battery: consume one use, add 0.2% wear. Battery stays in slot even if depleted.
+var batMsg = '';
+if (rh.batterySlot) {
+  rh.batterySlot.usesLeft = Math.max(0, rh.batterySlot.usesLeft - 1);
+  rh.batterySlot.wear = parseFloat(Math.min(100, rh.batterySlot.wear + 0.2).toFixed(4));
+  if (rh.batterySlot.usesLeft <= 0) {
+    rh.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
+    batMsg = ' | Power Cell DEPLETED (remove and replace).';
+  } else {
+    batMsg = ' | Power Cell uses left: ' + rh.batterySlot.usesLeft + ' / 4.';
+  }
+}
+
 if (rh.durability <= 0) {
   STATE.regolithHarvester = null;
-  log(`REG-HARVEST: Complete! +${regYield} Regolith. Wear: -${wear}. [UNIT DESTROYED — Durability reached zero]`);
+  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + '.' + batMsg + ' [UNIT DESTROYED — Durability reached zero]');
 } else {
-  log(`REG-HARVEST: Complete! +${regYield} Regolith. Wear: -${wear} (Durability: ${rh.durability}/100).`);
+  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + ' (Durability: ' + rh.durability + '/100).' + batMsg);
 }
 renderGroundOps();
 updateUI(); actionSave();
@@ -3394,7 +3587,7 @@ const toRepair = Math.min(amount, maxRepair, availScrap);
 if (toRepair < 1) return log('REG-HARVEST: Nothing to repair or no Scrap available.');
 STATE.inventory.Scrap = (STATE.inventory.Scrap || 0) - toRepair;
 rh.durability = Math.min(100, rh.durability + toRepair);
-log(`REG-HARVEST: Repaired +${toRepair} Durability (used ${toRepair} Scrap). Current: ${rh.durability}/100.`);
+log('REG-HARVEST: Repaired +' + toRepair + ' Durability (used ' + toRepair + ' Scrap). Current: ' + rh.durability + '/100.');
 renderGroundOps();
 updateUI();
 }
