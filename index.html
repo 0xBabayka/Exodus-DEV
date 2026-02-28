@@ -1486,7 +1486,8 @@ Soil: 100, "Seeds: Sprouts": 100, "Seeds: Amaranth": 5, "Seeds: Guarana": 5, "Se
 Snack: 0, Meal: 0, Feast: 0, "Energy Bar": 10, Barite: 0,
 "Aluminium Ore": 0, "Copper Ore": 0, "Titanium Ore": 0, Halite: 0, "Liquid CH4": 0, "Liquid O2": 0, "Rocket Fuel": 100, PVC: 0, Perchlorate: 0, PLA: 0, "Empty Battery": 0, "Full Battery": 0, Amaranth: 0, Guarana: 0, Potato: 0, "Fermented Amaranth": 0, "Fermented Guarana": 0,
 "Scavenging License": 0, Worms: 0, "Aluminium Plate": 0, "Titanium Plate": 0, "Machined Parts": 0, "Moving Parts": 0, "Roasted Guarana": 0, "Ground Guarana": 0, "Energy Isotonic": 0, "Raw silicon": 0, "Electric silicon": 0, "Structural Part": 0, "PVC Pipe": 0, "Electronic Parts": 0,
-Helium3: 0 // ADDED: New Currency
+Helium3: 0, // ADDED: New Currency
+"Broken Data": 0
 },
 stamina: { val: 100, max: 100 },
 cooldowns: { Snack: 0, Meal: 0, Feast: 0, "Energy Bar": 0 },
@@ -1872,7 +1873,7 @@ if (baseBody.type !== 'BASE') { baseBody.type = 'BASE'; log("SYS: Base Protocol 
 STATE.bodies.push({ id: 4, name: "J-03", dist: 1.5, speed: 2.4, color: "#f40", size: 9, type: "BASE", angle: 0 });
 log("SYS: Base Reconstruction Complete.");
 }
-const items = ['Snack', 'Meal', 'Feast', 'Energy Bar', 'Biological Waste', 'Methane', 'O2', 'Aluminium Ore', 'Copper Ore', 'Titanium Ore', 'Halite', 'Liquid CH4', 'Liquid O2', 'Rocket Fuel', 'PVC', 'Perchlorate', 'PLA', 'Empty Battery', 'Full Battery', 'Amaranth', 'Seeds: Amaranth', 'Guarana', 'Seeds: Guarana', 'Fermented Amaranth', 'Fermented Guarana', 'Scavenging License', 'Worms', 'Potato', 'Seeds: Potato', 'Seeds: Maize', 'Aluminium Plate', 'Titanium Plate', 'Machined Parts', 'Moving Parts', 'Roasted Guarana', 'Ground Guarana', 'Energy Isotonic', 'Raw silicon', 'Electric silicon', 'Structural Part', 'PVC Pipe', 'Electronic Parts'];
+const items = ['Snack', 'Meal', 'Feast', 'Energy Bar', 'Biological Waste', 'Methane', 'O2', 'Aluminium Ore', 'Copper Ore', 'Titanium Ore', 'Halite', 'Liquid CH4', 'Liquid O2', 'Rocket Fuel', 'PVC', 'Perchlorate', 'PLA', 'Empty Battery', 'Full Battery', 'Amaranth', 'Seeds: Amaranth', 'Guarana', 'Seeds: Guarana', 'Fermented Amaranth', 'Fermented Guarana', 'Scavenging License', 'Worms', 'Potato', 'Seeds: Potato', 'Seeds: Maize', 'Aluminium Plate', 'Titanium Plate', 'Machined Parts', 'Moving Parts', 'Roasted Guarana', 'Ground Guarana', 'Energy Isotonic', 'Raw silicon', 'Electric silicon', 'Structural Part', 'PVC Pipe', 'Electronic Parts', 'Broken Data'];
 items.forEach(i => { if(STATE.inventory[i] === undefined) STATE.inventory[i] = 0; });
 // ADDED: Initialize Helium3 if missing
 if (STATE.inventory.Helium3 === undefined) STATE.inventory.Helium3 = 0;
@@ -1947,6 +1948,27 @@ if(b) {
 b.loc = 'inventory'; updateUI();
 if(document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
 log(`RETRIEVE: BAT-${id} returned to Rack.`);
+}
+}
+
+// Permanently destroys a warehouse battery via server.
+async function destroyBattery(id) {
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+if (!confirm(`Destroy battery BAT-${id}? This cannot be undone.`)) return;
+try {
+const res = await fetch(`${API_URL}/game/destroy-battery`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ batteryId: id })
+});
+const data = await res.json();
+if (!res.ok) return log(`ERR: ${data.msg || 'Destroy failed.'}`);
+STATE.power.batteries = data.batteries;
+updateUI();
+if (document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
+log(`STORE: BAT-${id} permanently destroyed.`);
+} catch(e) {
+log(`ERR: destroyBattery — ${e.message}`);
 }
 }
 
@@ -2827,12 +2849,12 @@ let slotsToShow = Math.max(4, Math.ceil(wBats.length / 4) * 4);
 for (let i = 0; i < slotsToShow; i++) { if (i < wBats.length) { let b = wBats[i];
 const cp = (b.charge/POWER_CFG.batteryCap)*100;
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
-htmlBuffer.push(`<div class="wh-item" onclick="retrieveBattery('${b.id}')" style="border-color:${bCol}; background:rgba(255,255,255,0.02);"><div class="wh-cat" style="color:${bCol}">PWR</div><div class="wh-name" style="color:${bCol}">BAT-${b.id}</div><div class="wh-qty" style="font-size:11px; color:${bCol}; text-shadow:0 0 5px ${bCol}88;">${Math.floor(cp)}%</div><div style="font-size:9px; color:#666; margin-top:2px;">(CLICK TO RETRIEVE)</div></div>`);
+htmlBuffer.push(`<div class="wh-item" style="border-color:${bCol}; background:rgba(255,255,255,0.02); cursor:default;"><div class="wh-cat" style="color:${bCol}">PWR</div><div class="wh-name" style="color:${bCol}">BAT-${b.id}</div><div class="wh-qty" style="font-size:11px; color:${bCol}; text-shadow:0 0 5px ${bCol}88;">${Math.floor(cp)}%</div><div style="display:flex; gap:3px; margin-top:4px;"><button class="bat-action-btn" style="border-color:var(--agri); color:var(--agri); flex:1;" onclick="retrieveBattery('${b.id}')">RETRIEVE</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger); flex:1;" onclick="destroyBattery('${b.id}')">DESTROY</button></div></div>`);
 } else { htmlBuffer.push(`<div class="wh-item" style="border:1px dashed #334; justify-content:center; color:#445;"><div style="font-size:9px;">[ EMPTY SLOT ]</div></div>`); } }
 htmlBuffer.push(`</div>`); htmlBuffer.push(`<div style="grid-column:1/-1; border-bottom:1px solid #334; margin:5px 0;"></div>`);
 let itemsBuffer = []; const add = (c,n,q,col="#9ab") => { if(isNaN(q) || q === undefined || q <= 0) return;
 itemsBuffer.push(`<div class="wh-item"><div class="wh-cat">${c}</div><div class="wh-name" style="color:${col}">${n}</div><div class="wh-qty">${Math.floor(q)}</div></div>`); };
-add("KEY", "Scavenging License", STATE.inventory["Scavenging License"], "var(--xp)"); add("RES", "H₂", STATE.inventory.H2, "var(--warning)"); add("RES", "Raw Gas", STATE.inventory.Gas, "#ffaa00"); add("RES", "Methane", STATE.inventory.Methane, "#90ee90");
+add("KEY", "Scavenging License", STATE.inventory["Scavenging License"], "var(--xp)"); add("KEY", "Broken Data", STATE.inventory["Broken Data"], "#ff66aa"); add("RES", "H₂", STATE.inventory.H2, "var(--warning)"); add("RES", "Raw Gas", STATE.inventory.Gas, "#ffaa00"); add("RES", "Methane", STATE.inventory.Methane, "#90ee90");
 add("RES", "Liquid CH4", STATE.inventory["Liquid CH4"], "var(--fuel)"); add("RES", "Liquid O2", STATE.inventory["Liquid O2"], "var(--neon)"); add("FUEL", "Rocket Fuel", STATE.inventory["Rocket Fuel"], "var(--white)");
 add("MAT", "PVC", STATE.inventory.PVC, "var(--white)"); add("MAT", "Perchlorate", STATE.inventory.Perchlorate, "var(--white)"); add("MAT", "PLA", STATE.inventory.PLA, "var(--white)"); add("CMP", "Empty Battery", STATE.inventory["Empty Battery"], "#888");
 add("CMP", "Full Battery", STATE.inventory["Full Battery"], "var(--neon)"); add("MAT", "Electric Silicon", STATE.inventory["Electric silicon"], "var(--neon)"); add("MAT", "Amaranth", STATE.inventory.Amaranth, "#d400ff");
