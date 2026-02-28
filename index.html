@@ -3488,11 +3488,12 @@ const wear = Math.floor(Math.random() * (35 - 10 + 1)) + 10;
 STATE.inventory['Ice water'] = (STATE.inventory['Ice water'] || 0) + iceYield;
 ih.durability = Math.max(0, ih.durability - wear);
 
-// Battery: consume one use, add 0.2% wear. Battery stays in slot even if depleted.
+// Battery: consume one use, consume 8 energy, add 0.2% wear. Battery stays in slot even if depleted.
 var batMsg = '';
 if (ih.batterySlot) {
   ih.batterySlot.usesLeft = Math.max(0, ih.batterySlot.usesLeft - 1);
   ih.batterySlot.wear = parseFloat(Math.min(100, ih.batterySlot.wear + 0.2).toFixed(4));
+  ih.batterySlot.charge = Math.max(0, ih.batterySlot.charge - 8); // Each cycle consumes 8 energy
   if (ih.batterySlot.usesLeft <= 0) {
     ih.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
     batMsg = ' | Power Cell DEPLETED (remove and replace).';
@@ -3501,11 +3502,17 @@ if (ih.batterySlot) {
   }
 }
 
+// Planetary Exploration XP: +25 per completed harvester cycle
+var pe = STATE.skills.planetary_exploration;
+pe.xp += 25;
+var peMsg = '';
+if (pe.xp >= pe.next) { pe.lvl++; pe.xp = 0; pe.next = Math.floor(pe.next * 1.5); peMsg = ' | SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl + '!'; log('SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl); }
+
 if (ih.durability <= 0) {
   STATE.iceHarvester = null;
-  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + '.' + batMsg + ' [UNIT DESTROYED — Durability reached zero]');
+  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + '.' + batMsg + ' +25 Planetary XP.' + peMsg + ' [UNIT DESTROYED — Durability reached zero]');
 } else {
-  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + ' (Durability: ' + ih.durability + '/100).' + batMsg);
+  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + ' (Durability: ' + ih.durability + '/100).' + batMsg + ' +25 Planetary XP.' + peMsg);
 }
 renderGroundOps();
 updateUI(); actionSave();
@@ -3552,11 +3559,12 @@ const wear = Math.floor(Math.random() * (35 - 15 + 1)) + 15;
 STATE.inventory['Regolith'] = (STATE.inventory['Regolith'] || 0) + regYield;
 rh.durability = Math.max(0, rh.durability - wear);
 
-// Battery: consume one use, add 0.2% wear. Battery stays in slot even if depleted.
+// Battery: consume one use, consume 8 energy, add 0.2% wear. Battery stays in slot even if depleted.
 var batMsg = '';
 if (rh.batterySlot) {
   rh.batterySlot.usesLeft = Math.max(0, rh.batterySlot.usesLeft - 1);
   rh.batterySlot.wear = parseFloat(Math.min(100, rh.batterySlot.wear + 0.2).toFixed(4));
+  rh.batterySlot.charge = Math.max(0, rh.batterySlot.charge - 8); // Each cycle consumes 8 energy
   if (rh.batterySlot.usesLeft <= 0) {
     rh.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
     batMsg = ' | Power Cell DEPLETED (remove and replace).';
@@ -3565,11 +3573,17 @@ if (rh.batterySlot) {
   }
 }
 
+// Planetary Exploration XP: +25 per completed harvester cycle
+var pe = STATE.skills.planetary_exploration;
+pe.xp += 25;
+var peMsg = '';
+if (pe.xp >= pe.next) { pe.lvl++; pe.xp = 0; pe.next = Math.floor(pe.next * 1.5); peMsg = ' | SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl + '!'; log('SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl); }
+
 if (rh.durability <= 0) {
   STATE.regolithHarvester = null;
-  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + '.' + batMsg + ' [UNIT DESTROYED — Durability reached zero]');
+  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + '.' + batMsg + ' +25 Planetary XP.' + peMsg + ' [UNIT DESTROYED — Durability reached zero]');
 } else {
-  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + ' (Durability: ' + rh.durability + '/100).' + batMsg);
+  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + ' (Durability: ' + rh.durability + '/100).' + batMsg + ' +25 Planetary XP.' + peMsg);
 }
 renderGroundOps();
 updateUI(); actionSave();
