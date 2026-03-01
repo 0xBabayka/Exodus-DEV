@@ -3155,14 +3155,16 @@ if (ih.active) {
   if (ih.durability < 100) {
     const maxRepair = 100 - ih.durability;
     const availScrap = Math.floor(STATE.inventory.Scrap || 0);
-    const repairCap = Math.min(maxRepair, availScrap);
+    const availH3 = Math.floor(STATE.inventory.Helium3 || 0);
+    const repairCap = Math.min(maxRepair, availScrap, availH3);
     actionHtml += `
 <div style="margin-top:10px; border:1px solid rgba(255,152,0,0.3); background:rgba(255,152,0,0.04); padding:8px;">
   <div style="color:var(--warning); font-size:10px; font-weight:bold; margin-bottom:6px;">🔧 FIELD REPAIR</div>
   <div style="font-size:9px; color:#889; margin-bottom:8px;">
-    Cost: <span style="color:var(--warning);">1 Scrap = 1 Durability</span> &nbsp;|&nbsp;
-    Available Scrap: <span style="color:#fff;">${availScrap}</span> &nbsp;|&nbsp;
-    Needed to full: <span style="color:#fff;">${maxRepair}</span>
+    Cost: <span style="color:var(--warning);">1 Scrap + 1 $H3 = 1 Durability</span> &nbsp;|&nbsp;
+    Scrap: <span style="color:#fff;">${availScrap}</span> &nbsp;|&nbsp;
+    $H3: <span style="color:var(--warning);">${availH3}</span> &nbsp;|&nbsp;
+    Needed: <span style="color:#fff;">${maxRepair}</span>
   </div>
   <div style="display:flex; gap:6px; align-items:center;">
     <input type="number" id="repair-scrap-input" value="${repairCap}" min="1" max="${repairCap}"
@@ -3173,7 +3175,7 @@ if (ih.active) {
       REPAIR
     </button>
   </div>
-  ${repairCap < 1 ? '<div style="font-size:9px; color:var(--danger); margin-top:4px;">⚠ No Scrap available for repair.</div>' : ''}
+  ${repairCap < 1 ? '<div style="font-size:9px; color:var(--danger); margin-top:4px;">⚠ Need Scrap and $H3 for repair.</div>' : ''}
 </div>`;
   }
 }
@@ -3256,14 +3258,16 @@ if (rh.active) {
   if (rh.durability < 100) {
     const maxRepair = 100 - rh.durability;
     const availScrap = Math.floor(STATE.inventory.Scrap || 0);
-    const repairCap = Math.min(maxRepair, availScrap);
+    const availH3 = Math.floor(STATE.inventory.Helium3 || 0);
+    const repairCap = Math.min(maxRepair, availScrap, availH3);
     actionHtml += `
 <div style="margin-top:10px; border:1px solid rgba(255,152,0,0.3); background:rgba(255,152,0,0.04); padding:8px;">
   <div style="color:var(--warning); font-size:10px; font-weight:bold; margin-bottom:6px;">🔧 FIELD REPAIR</div>
   <div style="font-size:9px; color:#889; margin-bottom:8px;">
-    Cost: <span style="color:var(--warning);">1 Scrap = 1 Durability</span> &nbsp;|&nbsp;
-    Available Scrap: <span style="color:#fff;">${availScrap}</span> &nbsp;|&nbsp;
-    Needed to full: <span style="color:#fff;">${maxRepair}</span>
+    Cost: <span style="color:var(--warning);">1 Scrap + 1 $H3 = 1 Durability</span> &nbsp;|&nbsp;
+    Scrap: <span style="color:#fff;">${availScrap}</span> &nbsp;|&nbsp;
+    $H3: <span style="color:var(--warning);">${availH3}</span> &nbsp;|&nbsp;
+    Needed: <span style="color:#fff;">${maxRepair}</span>
   </div>
   <div style="display:flex; gap:6px; align-items:center;">
     <input type="number" id="reg-repair-scrap-input" value="${repairCap}" min="1" max="${repairCap}"
@@ -3274,7 +3278,7 @@ if (rh.active) {
       REPAIR
     </button>
   </div>
-  ${repairCap < 1 ? '<div style="font-size:9px; color:var(--danger); margin-top:4px;">⚠ No Scrap available for repair.</div>' : ''}
+  ${repairCap < 1 ? '<div style="font-size:9px; color:var(--danger); margin-top:4px;">⚠ Need Scrap and $H3 for repair.</div>' : ''}
 </div>`;
   }
 }
@@ -3521,21 +3525,31 @@ renderGroundOps();
 updateUI(); actionSave();
 }
 
-function repairIceHarvester() {
+async function repairIceHarvester() {
 const ih = STATE.iceHarvester;
 if (!ih) return log('HARVEST: No harvester to repair.');
 if (ih.active) return log('HARVEST: Cannot repair while deployed.');
 const input = document.getElementById('repair-scrap-input');
 const amount = input ? Math.max(1, parseInt(input.value) || 1) : 1;
-const availScrap = Math.floor(STATE.inventory.Scrap || 0);
-const maxRepair = 100 - ih.durability;
-const toRepair = Math.min(amount, maxRepair, availScrap);
-if (toRepair < 1) return log('HARVEST: Nothing to repair or no Scrap available.');
-STATE.inventory.Scrap = (STATE.inventory.Scrap || 0) - toRepair;
-ih.durability = Math.min(100, ih.durability + toRepair);
-log('HARVEST: Repaired +' + toRepair + ' Durability (used ' + toRepair + ' Scrap). Current: ' + ih.durability + '/100.');
+if (amount < 1) return log('HARVEST: Nothing to repair.');
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+try {
+const res = await fetch(`${API_URL}/game/harvester/repair`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ harvesterType: 'ice', amount })
+});
+const data = await res.json();
+if (!res.ok) return log('HARVEST: ' + data.msg);
+STATE.inventory = data.inventory;
+STATE.iceHarvester = data.harvester;
+log('HARVEST: ' + data.msg);
 renderGroundOps();
 updateUI();
+actionSave();
+} catch(e) {
+log('HARVEST ERR: ' + e.message);
+}
 }
 
 function startRegolithHarvest() {
@@ -3592,21 +3606,31 @@ renderGroundOps();
 updateUI(); actionSave();
 }
 
-function repairRegolithHarvester() {
+async function repairRegolithHarvester() {
 const rh = STATE.regolithHarvester;
 if (!rh) return log('REG-HARVEST: No harvester to repair.');
 if (rh.active) return log('REG-HARVEST: Cannot repair while deployed.');
 const input = document.getElementById('reg-repair-scrap-input');
 const amount = input ? Math.max(1, parseInt(input.value) || 1) : 1;
-const availScrap = Math.floor(STATE.inventory.Scrap || 0);
-const maxRepair = 100 - rh.durability;
-const toRepair = Math.min(amount, maxRepair, availScrap);
-if (toRepair < 1) return log('REG-HARVEST: Nothing to repair or no Scrap available.');
-STATE.inventory.Scrap = (STATE.inventory.Scrap || 0) - toRepair;
-rh.durability = Math.min(100, rh.durability + toRepair);
-log('REG-HARVEST: Repaired +' + toRepair + ' Durability (used ' + toRepair + ' Scrap). Current: ' + rh.durability + '/100.');
+if (amount < 1) return log('REG-HARVEST: Nothing to repair.');
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+try {
+const res = await fetch(`${API_URL}/game/harvester/repair`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ harvesterType: 'regolith', amount })
+});
+const data = await res.json();
+if (!res.ok) return log('REG-HARVEST: ' + data.msg);
+STATE.inventory = data.inventory;
+STATE.regolithHarvester = data.harvester;
+log('REG-HARVEST: ' + data.msg);
 renderGroundOps();
 updateUI();
+actionSave();
+} catch(e) {
+log('REG-HARVEST ERR: ' + e.message);
+}
 }
 
 function openDailyMissions() {
