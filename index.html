@@ -2123,11 +2123,21 @@ s.active = true; s.startTime = now(); s.duration = ROASTING_CFG.duration;
 log(`KITCHEN: Roaster ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
-function completeRoasting(s) {
-s.active = false;
-let yieldAmt = Math.floor(Math.random() * (ROASTING_CFG.output.max - ROASTING_CFG.output.min + 1)) + ROASTING_CFG.output.min;
-STATE.inventory["Roasted Guarana"] = (STATE.inventory["Roasted Guarana"] || 0) + yieldAmt;
-log(`KITCHEN: Roasting complete. +${yieldAmt} Roasted Guarana.`);
+async function completeRoasting(s) {
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-roasting`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+log(data.msg || `KITCHEN: Roasting complete.`);
+} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 
@@ -2145,11 +2155,21 @@ s.active = true; s.startTime = now(); s.duration = GRINDER_CFG.duration;
 log(`KITCHEN: Grinder ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
-function completeGrinding(s) {
-s.active = false;
-let yieldAmt = Math.floor(Math.random() * (GRINDER_CFG.output.max - GRINDER_CFG.output.min + 1)) + GRINDER_CFG.output.min;
-STATE.inventory["Ground Guarana"] = (STATE.inventory["Ground Guarana"] || 0) + yieldAmt;
-log(`KITCHEN: Grinding complete. +${yieldAmt} Ground Guarana.`);
+async function completeGrinding(s) {
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-grinding`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+log(data.msg || `KITCHEN: Grinding complete.`);
+} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 function startBrewing(id) {
@@ -2168,11 +2188,21 @@ s.active = true; s.startTime = now(); s.duration = BREWING_CFG.duration;
 log(`KITCHEN: Brewer ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
-function completeBrewing(s) {
-s.active = false;
-let yieldAmt = Math.floor(Math.random() * (BREWING_CFG.output.max - BREWING_CFG.output.min + 1)) + BREWING_CFG.output.min;
-STATE.inventory["Energy Isotonic"] = (STATE.inventory["Energy Isotonic"] || 0) + yieldAmt;
-log(`KITCHEN: Brewing complete. +${yieldAmt} Energy Isotonic.`);
+async function completeBrewing(s) {
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-brewing`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+log(data.msg || `KITCHEN: Brewing complete.`);
+} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 
