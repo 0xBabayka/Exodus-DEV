@@ -2702,14 +2702,23 @@ drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`FUEL: Slot ${id+1} Process (${mode.toUpperCase()}) started.`); renderFuelFactory(); updateUI(); actionSave();
 }
-function completeFuelProcess(s) {
-s.active = false;
-if (s.mode === 'methane') { const cfg = FUEL_CFG.methane; STATE.inventory["Liquid CH4"] = (STATE.inventory["Liquid CH4"] || 0) + cfg.output.liquidMethane;
-log(`FUEL: Slot ${s.id+1} complete. +${cfg.output.liquidMethane} Liquid CH4.`); } else if (s.mode === 'oxygen') { const cfg = FUEL_CFG.oxygen;
-STATE.inventory["Liquid O2"] = (STATE.inventory["Liquid O2"] || 0) + cfg.output.liquidO2; log(`FUEL: Slot ${s.id+1} complete. +${cfg.output.liquidO2} Liquid O2.`);
-} else if (s.mode === 'synthesis') { const cfg = FUEL_CFG.synthesis; STATE.inventory["Rocket Fuel"] = (STATE.inventory["Rocket Fuel"] || 0) + cfg.output.rocketFuel;
-log(`FUEL: Slot ${s.id+1} complete. +${cfg.output.rocketFuel} ROCKET FUEL.`); }
-s.mode = null; renderFuelFactory(); updateUI(); actionSave();
+async function completeFuelProcess(s) {
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('FUEL ERR: Not authenticated.'); renderFuelFactory(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-fuel-process`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`FUEL ERR: ${data.msg || 'Server error.'}`); renderFuelFactory(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.chemistry) STATE.skills.chemistry = data.chemistry;
+s.mode = null;
+log(data.msg || `FUEL: Slot ${s.id+1} complete.`);
+} catch (e) { log(`FUEL ERR: ${e.message}`); }
+renderFuelFactory(); updateUI(); actionSave();
 }
 function renderFuelFactory() {
 const c = document.getElementById('fuel-factory-ui'); if(!c) return;
