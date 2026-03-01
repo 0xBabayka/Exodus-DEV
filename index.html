@@ -1555,11 +1555,11 @@ stamina: { val: 100, max: 100 },
 cooldowns: { Snack: 0, Meal: 0, Feast: 0, "Energy Bar": 0 },
 skills: {
 scavenging: { lvl: 1, xp: 0, next: 100, locked: false },
-agriculture: { lvl: 1, xp: 0, next: 100 },
-metallurgy: { lvl: 1, xp: 0, next: 100 },
-chemistry: { lvl: 1, xp: 0, next: 100 },
-planetary_exploration: { lvl: 1, xp: 0, next: 100 },
-engineering: { lvl: 1, xp: 0, next: 100 }
+agriculture: { lvl: 1, xp: 0, next: 100, locked: false },
+metallurgy: { lvl: 1, xp: 0, next: 100, locked: false },
+chemistry: { lvl: 1, xp: 0, next: 100, locked: false },
+planetary_exploration: { lvl: 1, xp: 0, next: 100, locked: false },
+engineering: { lvl: 1, xp: 0, next: 100, locked: false }
 },
 components: {}, // Cleared component storage
 hangar: { probe: 1, miner: 0, hauler: 0, gas: 0 },
@@ -2207,7 +2207,9 @@ log(`AGRI: Lucky! Recovered ${sCount} ${s.crop} Seeds.`);
 }
 
 STATE.skills.agriculture.xp+=c.xp;
-if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) { STATE.skills.agriculture.lvl++; STATE.skills.agriculture.xp=0; STATE.skills.agriculture.next=Math.floor(STATE.skills.agriculture.next*1.5); log(`SKILL UP: AGRI LVL ${STATE.skills.agriculture.lvl}`); }
+if(!STATE.skills.agriculture.locked && STATE.skills.agriculture.lvl < 60) {
+if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) {
+if(STATE.skills.agriculture.lvl % 10 === 0) { STATE.skills.agriculture.locked = true; STATE.skills.agriculture.xp = STATE.skills.agriculture.next; log(`SKILL: AGRICULTURE Proficiency Locked at LVL ${STATE.skills.agriculture.lvl}. License required.`); } else { levelUpSkill('agriculture'); } } }
 s.status='empty'; s.crop=null; renderGreenhouse(); updateUI(); actionSave();
 }
 
@@ -2252,7 +2254,9 @@ let msg = `BIO: Composter ${s.id+1} finished. +${COMPOST_CFG.output.soil} Soil`;
 STATE.skills.agriculture.xp += 15;
 if (Math.random() < 0.1111) { let worms = Math.floor(Math.random() * 5) + 1; STATE.inventory.Worms = (STATE.inventory.Worms || 0) + worms;
 STATE.skills.agriculture.xp += 5; msg += ` & found ${worms} Worms!`; }
-if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) { STATE.skills.agriculture.lvl++; STATE.skills.agriculture.xp=0; STATE.skills.agriculture.next=Math.floor(STATE.skills.agriculture.next*1.5); log(`SKILL UP: AGRI LVL ${STATE.skills.agriculture.lvl}`); }
+if(!STATE.skills.agriculture.locked && STATE.skills.agriculture.lvl < 60) {
+if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) {
+if(STATE.skills.agriculture.lvl % 10 === 0) { STATE.skills.agriculture.locked = true; STATE.skills.agriculture.xp = STATE.skills.agriculture.next; log(`SKILL: AGRICULTURE Proficiency Locked at LVL ${STATE.skills.agriculture.lvl}. License required.`); } else { levelUpSkill('agriculture'); } } }
 log(msg + "."); renderComposter(); updateUI(); actionSave();
 }
 function renderComposter() {
@@ -2290,8 +2294,7 @@ if (Math.random() < 0.2222) { let haliteAmt = Math.floor(Math.random() * (6 - 2 
 STATE.inventory.Halite = (STATE.inventory.Halite || 0) + haliteAmt; msg += `, +${haliteAmt} Halite`; xp += 5; } log(msg + "."); }
 else if(s.mode === 'methane') { STATE.inventory.Methane = (STATE.inventory.Methane||0) + cfg.output.methane; STATE.inventory.Water = (STATE.inventory.Water||0) + cfg.output.water;
 log(`SABATIER: Reactor ${s.id+1} finished. +Methane, +Water.`); xp += 15; }
-if(xp > 0) { STATE.skills.chemistry.xp += xp; if(STATE.skills.chemistry.xp >= STATE.skills.chemistry.next) { STATE.skills.chemistry.lvl++; STATE.skills.chemistry.xp = 0; STATE.skills.chemistry.next = Math.floor(STATE.skills.chemistry.next * 1.5);
-log(`SKILL UP: CHEMISTRY LVL ${STATE.skills.chemistry.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('chemistry', xp); }
 s.active = false; s.mode = null; renderSabatier(); updateUI(); actionSave();
 }
 function renderSabatier() {
@@ -2440,8 +2443,7 @@ yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Titanium Ore
 xp = 20; } else if (s.mode === 'silicon') { let yieldAmt = 1;
 msg = `SMELTER ${s.id+1}: Produced ${yieldAmt} Raw silicon`; if(lucky) { let bonus = 1; yieldAmt += bonus;
 msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Raw silicon"] = (STATE.inventory["Raw silicon"] || 0) + yieldAmt; xp = 10; }
-if(xp > 0) { STATE.skills.metallurgy.xp += xp; if(STATE.skills.metallurgy.xp >= STATE.skills.metallurgy.next) { STATE.skills.metallurgy.lvl++; STATE.skills.metallurgy.xp = 0; STATE.skills.metallurgy.next = Math.floor(STATE.skills.metallurgy.next * 1.5);
-log(`SKILL UP: METALLURGY LVL ${STATE.skills.metallurgy.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('metallurgy', xp); }
 s.mode = null; log(msg); renderSmelter(); updateUI(); actionSave();
 }
 function renderSmelter() {
@@ -2479,8 +2481,7 @@ xp = 35; } else if (s.mode === 'titanium_plate') { let yieldAmt = Math.floor(Mat
 msg = `FACTORY: Produced ${yieldAmt} Titanium Plate`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 5) + 1;
 yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Titanium Plate"] = (STATE.inventory["Titanium Plate"] || 0) + yieldAmt;
 xp = 55; }
-if(xp > 0) { STATE.skills.metallurgy.xp += xp; if(STATE.skills.metallurgy.xp >= STATE.skills.metallurgy.next) { STATE.skills.metallurgy.lvl++; STATE.skills.metallurgy.xp = 0; STATE.skills.metallurgy.next = Math.floor(STATE.skills.metallurgy.next * 1.5);
-log(`SKILL UP: METALLURGY LVL ${STATE.skills.metallurgy.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('metallurgy', xp); }
 s.mode = null; log(msg + "."); renderMetalworks(); updateUI(); actionSave();
 }
 function renderMetalworks() {
@@ -2519,8 +2520,7 @@ xp = 90; } else if (s.mode === 'moving_parts') { let yieldAmt = Math.floor(Math.
 msg = `FACTORY: Produced ${yieldAmt} Moving Parts`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 2) + 1;
 yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Moving Parts"] = (STATE.inventory["Moving Parts"] || 0) + yieldAmt;
 xp = 140; }
-if(xp > 0) { STATE.skills.engineering.xp += xp; if(STATE.skills.engineering.xp >= STATE.skills.engineering.next) { STATE.skills.engineering.lvl++; STATE.skills.engineering.xp = 0; STATE.skills.engineering.next = Math.floor(STATE.skills.engineering.next * 1.5);
-log(`SKILL UP: ENGINEERING LVL ${STATE.skills.engineering.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('engineering', xp); }
 s.mode = null; log(msg + "."); renderMachineParts(); updateUI(); actionSave();
 }
 function renderMachineParts() {
@@ -2563,8 +2563,7 @@ STATE.inventory["Structural Part"] = (STATE.inventory["Structural Part"] || 0) +
 msg = `PRINTER: Produced ${yieldAmt} PVC Pipe`; STATE.inventory["PVC Pipe"] = (STATE.inventory["PVC Pipe"] || 0) + yieldAmt; xp = 25; }
 else if (s.mode === 'electronic_parts') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
 msg = `PRINTER: Produced ${yieldAmt} Electronic Parts`; STATE.inventory["Electronic Parts"] = (STATE.inventory["Electronic Parts"] || 0) + yieldAmt; xp = 45; }
-if(xp > 0) { STATE.skills.engineering.xp += xp; if(STATE.skills.engineering.xp >= STATE.skills.engineering.next) { STATE.skills.engineering.lvl++; STATE.skills.engineering.xp = 0; STATE.skills.engineering.next = Math.floor(STATE.skills.engineering.next * 1.5);
-log(`SKILL UP: ENGINEERING LVL ${STATE.skills.engineering.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('engineering', xp); }
 s.mode = null; log(msg + "."); renderPrinter(); updateUI(); actionSave();
 }
 function renderPrinter() {
@@ -2669,8 +2668,7 @@ updateUI();
 } else if (s.mode === 'electric_silicon') { let amt = 2; msg = `CHEM: Synthesized ${amt} Electric Silicon`;
 if (lucky) { let bonus = 1; amt += bonus; msg += ` (+${bonus} Bonus!)`;
 } STATE.inventory["Electric silicon"] = (STATE.inventory["Electric silicon"] || 0) + amt; xp = 25; }
-if(xp > 0) { STATE.skills.chemistry.xp += xp; if(STATE.skills.chemistry.xp >= STATE.skills.chemistry.next) { STATE.skills.chemistry.lvl++; STATE.skills.chemistry.xp = 0; STATE.skills.chemistry.next = Math.floor(STATE.skills.chemistry.next * 1.5);
-log(`SKILL UP: CHEMISTRY LVL ${STATE.skills.chemistry.lvl}`); } }
+if(xp > 0) { tryAddSkillXp('chemistry', xp); }
 s.mode = null; log(msg + "."); renderChemLab(); updateUI(); actionSave();
 }
 function renderChemLab() {
@@ -2712,14 +2710,42 @@ if (Math.random() > 0.5) { STATE.inventory.Scrap += bonusAmt; msg += ` +${bonusA
 msg += ` +${bonusAmt} Regolith (Lucky!)`; } } }
 log(msg); updateUI(); actionSave();
 }
-function levelUpScavenging() {
-const s = STATE.skills.scavenging; s.lvl++; s.xp = 0; const tier = SCAV_TIERS.find(t => s.lvl >= t.min && s.lvl <= t.max);
-if (tier) s.next = tier.xpReq; else s.next = 5000; log(`SKILL UP: SCAV LVL ${s.lvl} (${tier ? tier.name : 'Unknown'})`);
+function levelUpSkill(key) {
+const s = STATE.skills[key]; s.lvl++; s.xp = 0;
+const tier = SCAV_TIERS.find(t => s.lvl >= t.min && s.lvl <= t.max);
+if (tier) s.next = tier.xpReq; else s.next = 5000;
+log(`SKILL UP: ${key.replace(/_/g, ' ').toUpperCase()} LVL ${s.lvl}`);
 }
-function unlockScavenging() {
-if (!STATE.skills.scavenging.locked) return; if ((STATE.inventory["Scavenging License"] || 0) < 1) return log("ERR: Missing License.");
-STATE.inventory["Scavenging License"]--; STATE.skills.scavenging.locked = false; levelUpScavenging(); renderProficiency(); updateUI();
+function levelUpScavenging() { levelUpSkill('scavenging'); }
+function tryAddSkillXp(key, amount) {
+const s = STATE.skills[key];
+if (!s || s.locked || s.lvl >= 60) return;
+s.xp += amount;
+if (s.xp >= s.next) {
+if (s.lvl % 10 === 0) {
+s.locked = true; s.xp = s.next;
+log(`SKILL: ${key.replace(/_/g, ' ').toUpperCase()} Proficiency Locked at LVL ${s.lvl}. License required.`);
+} else { levelUpSkill(key); } } }
+async function unlockSkill(skillKey) {
+const s = STATE.skills[skillKey];
+if (!s || !s.locked) return;
+if ((STATE.inventory["Scavenging License"] || 0) < 1) return log("ERR: Missing License.");
+if (!AUTH_TOKEN) return log("ERR: Not authenticated.");
+try {
+const res = await fetch(`${API_URL}/game/skill/unlock`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ skillKey })
+});
+const data = await res.json();
+if (!res.ok) return log(`SKILL ERR: ${data.msg || 'Unlock failed.'}`);
+STATE.inventory = data.inventory;
+STATE.skills[skillKey] = data.skill;
+log(`SKILL: ${skillKey.replace(/_/g, ' ').toUpperCase()} unlocked! Now LVL ${data.skill.lvl}.`);
+renderProficiency(); updateUI(); actionSave();
+} catch(e) { log(`SKILL ERR: ${e.message}`); }
 }
+function unlockScavenging() { unlockSkill('scavenging'); }
 
 function useStamina(v) { if(STATE.stamina.val>=v) { STATE.stamina.val-=v; updateUI(); return true; } log("ALERT: HUNGRY."); return false; }
 
@@ -2991,7 +3017,7 @@ const tier = SCAV_TIERS.find(t => s.lvl >= t.min && s.lvl <= t.max); if (tier) {
 barColor = tier.color; } else if (s.lvl > 60) { tierName = "ARTISAN+"; barColor = "#FF3333";
 } name += ` <span style="color:${barColor}; font-size:9px;">[${tierName}]</span>`; if (s.locked) { const nextTier = SCAV_TIERS.find(t => t.min === s.lvl + 1);
 const reqText = nextTier ? nextTier.cert : "UNKNOWN CERTIFICATE"; barColor = "var(--danger)";
-extraInfo = `<div style="margin-top:2px; display:flex; justify-content:space-between; align-items:center;"><span style="color:var(--danger); font-size:9px;">🔒 REQ: ${reqText}</span><button class="nav-btn" style="padding:2px 6px; font-size:9px; border-color:var(--xp); color:var(--xp);" onclick="unlockScavenging()">UNLOCK (1 LICENSE)</button></div>`;
+extraInfo = `<div style="margin-top:2px; display:flex; justify-content:space-between; align-items:center;"><span style="color:var(--danger); font-size:9px;">🔒 REQ: ${reqText}</span><button class="nav-btn" style="padding:2px 6px; font-size:9px; border-color:var(--xp); color:var(--xp);" onclick="unlockSkill('${key}')">UNLOCK (1 LICENSE)</button></div>`;
 } html += `<div style="margin-bottom:15px;"><div style="display:flex; justify-content:space-between; font-size:10px; color:#fff; margin-bottom:3px;"><span>${name} <span style="color:${barColor}">LVL ${s.lvl}</span></span><span style="color:#667">${Math.floor(s.xp)} / ${Math.floor(s.next)} XP</span></div><div style="width:100%; height:4px; background:#111; position:relative;"><div style="height:100%; width:${p}%; background:${barColor}; box-shadow:0 0 5px ${barColor};"></div></div>${extraInfo}</div>`;
 } html += `</div>`; c.innerHTML = html;
 }
@@ -3522,10 +3548,10 @@ if (ih.batterySlot) {
 }
 
 // Planetary Exploration XP: +25 per completed harvester cycle
-var pe = STATE.skills.planetary_exploration;
-pe.xp += 25;
+tryAddSkillXp('planetary_exploration', 25);
 var peMsg = '';
-if (pe.xp >= pe.next) { pe.lvl++; pe.xp = 0; pe.next = Math.floor(pe.next * 1.5); peMsg = ' | SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl + '!'; log('SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl); }
+var pe = STATE.skills.planetary_exploration;
+if (pe.locked) { peMsg = ' | SKILL: PLANETARY EXPLORATION Locked at LVL ' + pe.lvl + '. License required.'; }
 
 if (ih.durability <= 0) {
   STATE.iceHarvester = null;
@@ -3603,10 +3629,10 @@ if (rh.batterySlot) {
 }
 
 // Planetary Exploration XP: +25 per completed harvester cycle
-var pe = STATE.skills.planetary_exploration;
-pe.xp += 25;
+tryAddSkillXp('planetary_exploration', 25);
 var peMsg = '';
-if (pe.xp >= pe.next) { pe.lvl++; pe.xp = 0; pe.next = Math.floor(pe.next * 1.5); peMsg = ' | SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl + '!'; log('SKILL UP: PLANETARY EXPLORATION LVL ' + pe.lvl); }
+var pe = STATE.skills.planetary_exploration;
+if (pe.locked) { peMsg = ' | SKILL: PLANETARY EXPLORATION Locked at LVL ' + pe.lvl + '. License required.'; }
 
 if (rh.durability <= 0) {
   STATE.regolithHarvester = null;
