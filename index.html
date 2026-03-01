@@ -1853,9 +1853,21 @@ setInterval(function() {
 
 function startGameLoop() {
 // --- АВТОСЕЙВ: случайный интервал 30–60 секунд (снижение нагрузки на Render) ---
+// ИСПРАВЛЕНИЕ: пропускаем сохранение при скрытой вкладке.
+// Когда вкладка скрыта — rAF заморожен, completeIceHarvest/completeRegolithHarvest
+// не вызваны, harvester.active остаётся true. Если autosave отправляет такой state
+// на сервер, сервер детектирует завершённый харвестер по oldState и начисляет XP.
+// При следующем сейве (после возврата вкладки) цикл повторяется — XP удваивается.
+// Начальный save при уходе в фон (visibilitychange) и Worker покрывают весь offline-период.
 (function scheduleAutoSave() {
 const delay = 30000 + Math.floor(Math.random() * 30000);
-setTimeout(() => { ServerSys.save(); if (socket && socket.connected) socket.emit('save_game', { gameState: STATE }); scheduleAutoSave(); }, delay);
+setTimeout(() => {
+if (!document.hidden) {
+ServerSys.save();
+if (socket && socket.connected) socket.emit('save_game', { gameState: STATE });
+}
+scheduleAutoSave();
+}, delay);
 })();
 window.addEventListener('beforeunload', () => {
 ServerSys.save();
