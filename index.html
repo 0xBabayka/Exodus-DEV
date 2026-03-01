@@ -825,14 +825,6 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('planetary_exploration')">BUY (1 DATA CORE)</button>
 </div>
 
-<div style="border-top:1px solid rgba(68,238,119,0.2); margin-top:8px; padding-top:8px;">
-<div style="color:var(--agri); font-weight:bold; font-size:10px; letter-spacing:1px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-<span>🌱 SEED MARKET</span>
-<span id="seed-shop-timer" style="color:var(--warning); font-size:9px; font-weight:normal; letter-spacing:0px;"></span>
-</div>
-<div id="seed-shop-offers"><div style="color:#445; text-align:center; padding:10px; font-size:9px;">LOADING SEED MARKET...</div></div>
-</div>
-
 </div>
 </div>
 
@@ -4064,133 +4056,23 @@ log(`MKT ERR: ${e.message}`);
 // Legacy wrapper kept for compatibility
 async function buyLicense() { await buySkillLicense('scavenging'); }
 
-// =============================================================================
-// --- SEED SHOP ---
-// =============================================================================
-
-const SEED_SHOP_COLORS = {
-'Sprouts':  'var(--agri)',
-'Potato':   'var(--maize)',
-'Maize':    'var(--maize)',
-'Amaranth': 'var(--xp)',
-'Guarana':  'var(--kitchen)'
-};
-
-let seedShopTimerInterval = null;
-
-// Запускает/перезапускает countdown-таймер в заголовке Seed Market
-function startSeedShopTimer() {
-if (seedShopTimerInterval) clearInterval(seedShopTimerInterval);
-seedShopTimerInterval = setInterval(() => {
-const timerEl = document.getElementById('seed-shop-timer');
-if (!timerEl) return;
-const shop = STATE.market && STATE.market.seedShop;
-if (!shop || !shop.nextRefresh) { timerEl.innerText = ''; return; }
-const msLeft = Math.max(0, shop.nextRefresh - Date.now());
-if (msLeft === 0) {
-// Срок истёк — перезагружаем магазин с сервера
-clearInterval(seedShopTimerInterval);
-seedShopTimerInterval = null;
-timerEl.innerText = '[REFRESHING...]';
-fetch(`${API_URL}/market/seeds`, { headers: { 'x-auth-token': AUTH_TOKEN } })
-.then(r => r.ok ? r.json() : null)
-.then(data => { if(data) { STATE.market.seedShop = data; renderSeedShop(data); startSeedShopTimer(); } })
-.catch(() => {});
-return;
-}
-const h = Math.floor(msLeft / 3600000);
-const m = Math.floor((msLeft % 3600000) / 60000);
-const s = Math.floor((msLeft % 60000) / 1000);
-timerEl.innerText = `[REFRESH IN ${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s]`;
-}, 1000);
-}
-
-// Рендерит карточки предложений магазина семян
-function renderSeedShop(data) {
-const container = document.getElementById('seed-shop-offers');
-if (!container) return;
-const timerEl = document.getElementById('seed-shop-timer');
-if (timerEl && data && data.nextRefresh) {
-const msLeft = Math.max(0, data.nextRefresh - Date.now());
-const h = Math.floor(msLeft / 3600000);
-const m = Math.floor((msLeft % 3600000) / 60000);
-const s = Math.floor((msLeft % 60000) / 1000);
-timerEl.innerText = `[REFRESH IN ${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s]`;
-}
-const offers = (data && Array.isArray(data.offers)) ? data.offers : [];
-if (offers.length === 0) {
-container.innerHTML = '<div style="color:#445; text-align:center; padding:10px; font-size:9px;">NO SEEDS AVAILABLE TODAY</div>';
-return;
-}
-let html = '';
-offers.forEach(offer => {
-const color = SEED_SHOP_COLORS[offer.seedType] || 'var(--agri)';
-const soldOut = offer.qtyRemaining <= 0;
-const maxQty = soldOut ? 1 : offer.qtyRemaining;
-html += `<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(68,238,119,0.18);${soldOut ? ' opacity:0.45;' : ''}">
-<div style="text-align:left;">
-<div style="color:${color}; font-weight:bold;">🌱 SEEDS: ${offer.seedType.toUpperCase()}</div>
-<div style="font-size:9px; color:#889;">Stock: <span style="color:#ccc;">${offer.qtyRemaining}/${offer.qty}</span> &nbsp;|&nbsp; <span style="color:var(--warning); font-weight:bold;">${offer.price} $H3</span>/ea</div>
-</div>
-<div style="display:flex; gap:4px; align-items:center;">
-<input type="number" id="seed-qty-${offer.seedType}" min="1" max="${maxQty}" value="1" style="width:38px; background:rgba(0,0,0,0.35); border:1px solid #334; color:#ccc; font-family:monospace; font-size:9px; padding:2px 4px; text-align:center;"${soldOut ? ' disabled' : ''}>
-<button class="nav-btn" style="padding:2px 8px; font-size:9px; border-color:${soldOut ? '#333' : 'var(--agri)'}; color:${soldOut ? '#444' : 'var(--agri)'};" onclick="buySeeds('${offer.seedType}')"${soldOut ? ' disabled' : ''}>${soldOut ? 'SOLD OUT' : 'BUY'}</button>
-</div>
-</div>`;
-});
-container.innerHTML = html;
-}
-
-// Авторизованная покупка семян через сервер
-async function buySeeds(seedType) {
-if (!AUTH_TOKEN) return log("ERR: Not authenticated.");
-const qtyEl = document.getElementById(`seed-qty-${seedType}`);
-const qty = qtyEl ? Math.max(1, parseInt(qtyEl.value, 10) || 1) : 1;
-const shop = STATE.market && STATE.market.seedShop;
-const offer = shop && Array.isArray(shop.offers) ? shop.offers.find(o => o.seedType === seedType) : null;
-if (!offer) return log("MKT: Seed not available.");
-if (offer.qtyRemaining < qty) return log(`MKT: Not enough stock. Available: ${offer.qtyRemaining}.`);
-const totalCost = offer.price * qty;
-if ((STATE.inventory.Helium3 || 0) < totalCost) return log(`MKT: Insufficient $H3. Need ${totalCost}, have ${Math.floor(STATE.inventory.Helium3 || 0)}.`);
-try {
-const res = await fetch(`${API_URL}/market/seeds/buy`, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
-body: JSON.stringify({ seedType, qty })
-});
-const data = await res.json();
-if (!res.ok) throw new Error(data.msg || "PURCHASE FAILED");
-STATE.inventory = data.inventory;
-STATE.market.seedShop = { offers: data.offers, nextRefresh: data.nextRefresh };
-log(`MKT: Purchased ${qty}x Seeds: ${seedType} for ${totalCost} $H3.`);
-renderSeedShop(STATE.market.seedShop);
-renderWarehouse();
-updateUI();
-actionSave();
-} catch(e) {
-log(`MKT ERR: ${e.message}`);
-}
-}
-
-
+function initMarket() {
 if(!STATE.market) STATE.market = {};
 if(!STATE.market.offers) STATE.market.offers = [];
 if(!STATE.market.buyOrders) STATE.market.buyOrders = [];
 if(!STATE.market.batteryOffers) STATE.market.batteryOffers = [];
 if(!STATE.market.batteryBuyOrders) STATE.market.batteryBuyOrders = [];
-if(!STATE.market.seedShop) STATE.market.seedShop = { offers: [], nextRefresh: 0 };
 // Load offers from server on init
 loadMarketData();
 }
 
 async function loadMarketData() {
 try {
-const [resOffers, resBuy, resBatOffers, resBatBuy, resSeeds] = await Promise.all([
+const [resOffers, resBuy, resBatOffers, resBatBuy] = await Promise.all([
 fetch(`${API_URL}/market`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
 fetch(`${API_URL}/market/buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
 fetch(`${API_URL}/market/battery-offers`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
-fetch(`${API_URL}/market/battery-buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } }),
-fetch(`${API_URL}/market/seeds`, { headers: { 'x-auth-token': AUTH_TOKEN } })
+fetch(`${API_URL}/market/battery-buy-orders`, { headers: { 'x-auth-token': AUTH_TOKEN } })
 ]);
 const dataOffers = await resOffers.json();
 if(!resOffers.ok) throw new Error(dataOffers.msg || "DATA LOAD ERROR");
@@ -4207,12 +4089,6 @@ STATE.market.batteryOffers = dataBatOffers.batteryOffers || [];
 if(resBatBuy.ok) {
 const dataBatBuy = await resBatBuy.json();
 STATE.market.batteryBuyOrders = dataBatBuy.batteryBuyOrders || [];
-}
-if(resSeeds.ok) {
-const dataSeeds = await resSeeds.json();
-STATE.market.seedShop = dataSeeds;
-renderSeedShop(dataSeeds);
-startSeedShopTimer();
 }
 
 renderP2PMarket();
@@ -4235,14 +4111,6 @@ if(tab === 'p2p') {
 loadMarketData();
 populateP2PSelect();
 switchP2PTab(STATE.uiTabs.p2pSub || 'sell');
-}
-
-if(tab === 'sys') {
-// Обновляем магазин семян при каждом переключении на системную вкладку
-fetch(`${API_URL}/market/seeds`, { headers: { 'x-auth-token': AUTH_TOKEN } })
-.then(r => r.ok ? r.json() : null)
-.then(data => { if(data) { STATE.market.seedShop = data; renderSeedShop(data); startSeedShopTimer(); } })
-.catch(() => {});
 }
 
 // Сохранение состояния вкладки
