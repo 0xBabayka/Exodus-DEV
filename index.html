@@ -2464,12 +2464,24 @@ useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`REF: Fermentation (${mode}) started.`); renderWaterFilter(); updateUI(); actionSave();
 }
-function completeFermentation() {
-const s = STATE.refinery.fermenterSlot; const cfg = FERMENT_CFG[s.mode]; s.active = false;
-let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-if(s.mode === 'amaranth') { STATE.inventory["Fermented Amaranth"] = (STATE.inventory["Fermented Amaranth"]||0) + yieldAmt; log(`REF: Fermentation complete. +${yieldAmt} Fermented Amaranth.`);
-} else if(s.mode === 'guarana') { STATE.inventory["Fermented Guarana"] = (STATE.inventory["Fermented Guarana"]||0) + yieldAmt; log(`REF: Fermentation complete. +${yieldAmt} Fermented Guarana.`); }
-s.mode = null; renderWaterFilter(); updateUI(); actionSave();
+async function completeFermentation() {
+const s = STATE.refinery.fermenterSlot;
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-fermentation`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({})
+});
+const data = await res.json();
+if (!res.ok) { log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+s.mode = null;
+log(data.msg || `REF: Fermentation complete.`);
+} catch (e) { log(`REF ERR: ${e.message}`); }
+renderWaterFilter(); updateUI(); actionSave();
 }
 function renderWaterFilter() {
 const c=document.getElementById('water-filter-ui'); if(!c)return;
