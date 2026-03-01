@@ -459,6 +459,15 @@ SCAVENGE SECTOR <span style="font-size:9px; opacity:0.7">[-1 Stam / -1 Energy]</
 <div style="background:rgba(255,255,255,0.02); padding:4px;"><div id="c-gas" style="color:var(--gas); font-weight:bold;">0</div><span style="font-size:8px; color:#555;">GAS</span></div>
 </div>
 <div id="fleet-list"></div>
+<div style="margin-top:8px; padding:6px 4px 2px; border-top:1px solid rgba(255,255,255,0.06);">
+  <div style="display:flex; justify-content:space-between; font-size:8px; color:#555; margin-bottom:3px;">
+    <span>PROBE HULL</span>
+    <span id="probe-dur-text" style="color:#00ffaa;">1000/1000</span>
+  </div>
+  <div style="width:100%; height:3px; background:#111; border:1px solid #222;">
+    <div id="probe-dur-fill" style="height:100%; width:100%; background:#00ffaa; transition:width 0.3s;"></div>
+  </div>
+</div>
 </div>
 
 <div id="scanner-panel" class="panel interactive draggable">
@@ -746,6 +755,31 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div>
 <div class="header" style="background:transparent; border:none; padding:0; margin-bottom:5px; font-size:11px;">T1 SHIPS</div>
 <div id="shipyard-grid"></div>
+</div>
+<div style="margin-top:15px; border-top:1px solid rgba(0,255,170,0.2); padding-top:12px;">
+  <div class="header" style="background:transparent; border:none; padding:0; margin-bottom:8px; font-size:11px; color:var(--probe);">PROBE HULL REPAIR</div>
+  <div style="background:rgba(0,255,170,0.04); border:1px solid rgba(0,255,170,0.15); padding:10px;">
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:#aaa; margin-bottom:5px;">
+      <span>HULL INTEGRITY</span>
+      <span id="hangar-probe-dur-text" style="color:#00ffaa; font-weight:bold;">1000/1000</span>
+    </div>
+    <div style="width:100%; height:5px; background:#111; border:1px solid #222; margin-bottom:8px;">
+      <div id="hangar-probe-dur-fill" style="height:100%; width:100%; background:#00ffaa; transition:width 0.3s;"></div>
+    </div>
+    <div style="font-size:9px; color:#555; margin-bottom:8px;">
+      Cost: 1 Scrap + 1 $H3 per point &nbsp;|&nbsp; Available: <span id="hangar-probe-scrap">0</span> Scrap, <span id="hangar-probe-h3">0</span> $H3
+    </div>
+    <div style="display:flex; gap:6px; align-items:center;">
+      <input id="hangar-probe-repair-amount" type="number" min="1" max="1000" value="1"
+        style="width:70px; background:#0a0a0a; border:1px solid #333; color:#eee; padding:4px 6px; font-size:11px; font-family:monospace;">
+      <button id="hangar-probe-repair-btn" onclick="repairProbe()"
+        style="background:rgba(0,255,170,0.1); border:1px solid var(--probe); color:var(--probe); padding:4px 12px; font-size:11px; cursor:pointer;">
+        ▲ REPAIR HULL
+      </button>
+      <span id="hangar-probe-repair-cost" style="font-size:9px; color:#555;"></span>
+    </div>
+    <div id="hangar-probe-repair-warn" style="font-size:9px; color:var(--danger); margin-top:6px;"></div>
+  </div>
 </div>
 </div>
 
@@ -1389,6 +1423,10 @@ buildQueueLength: STATE.buildQueue.length
 if (typeof data.consumptionRate === 'number') {
 STATE.power.consumptionRate = data.consumptionRate;
 }
+// Sync probe durability from server (authoritative)
+if (typeof data.probeDurability === 'number') {
+STATE.probeDurability = data.probeDurability;
+}
 }
 } catch(e) { hideServerStatus(); console.error("Save Failed", e); }
 },
@@ -1674,6 +1712,8 @@ dailyMission: null, // Добавлено для миссий
 iceHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null },
 regolithHarvester: { durability: 100, active: false, startTime: 0, duration: 6 * 60 * 60 * 1000, batterySlot: null },
 market: { offers: [] }, // MARKET INITIALIZATION
+probeDurability: 1000,          // Probe hull integrity (max 1000), server-authoritative
+probeDurabilityLastCheck: 0     // Server timestamp of last drain check (0 = docked)
 uiTabs: { base: 'refinery', market: 'sys', missions: 'ground' },
 activeModal: null,
 uiState: null
@@ -2011,6 +2051,9 @@ if (STATE.regolithHarvester === undefined) STATE.regolithHarvester = { durabilit
 // Backward compat: add batterySlot to existing saves that don't have it
 if (STATE.iceHarvester && typeof STATE.iceHarvester === 'object' && !Object.prototype.hasOwnProperty.call(STATE.iceHarvester, 'batterySlot')) STATE.iceHarvester.batterySlot = null;
 if (STATE.regolithHarvester && typeof STATE.regolithHarvester === 'object' && !Object.prototype.hasOwnProperty.call(STATE.regolithHarvester, 'batterySlot')) STATE.regolithHarvester.batterySlot = null;
+// Backward compat: add probe durability fields to existing saves
+if (typeof STATE.probeDurability !== 'number') STATE.probeDurability = 1000;
+if (typeof STATE.probeDurabilityLastCheck !== 'number') STATE.probeDurabilityLastCheck = 0;
 }
 
 function restoreOfflineProgress(lastTime) {
@@ -3124,7 +3167,60 @@ SHIP FABRICATION OFFLINE
 const qGrid = document.getElementById('hangar-build-queue'); if(qGrid) { if(STATE.buildQueue.length === 0) { qGrid.innerHTML = "<div style='color:#445; text-align:center; padding:10px;'>FABRICATION IDLE</div>";
 } else { qGrid.innerHTML = STATE.buildQueue.map((job, i) => { const p = Math.min(100, (job.progress/ job.totalDuration) * 100); return `<div style="margin-bottom:5px;"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>${job.type.toUpperCase()}</span><span>${Math.floor(p)}%</span></div><div style="background:#111; height:4px; width:100%"><div style="height:100%; width:${p}%; background:var(--success)"></div></div></div>`; }).join('');
 } }
+renderHangarProbeRepair();
 }
+function renderHangarProbeRepair() {
+    const PROBE_MAX = 1000;
+    const dur  = typeof STATE.probeDurability === 'number' ? STATE.probeDurability : PROBE_MAX;
+    const pct  = Math.max(0, Math.min(100, (dur / PROBE_MAX) * 100));
+    const col  = dur > 500 ? '#00ffaa' : dur > 200 ? '#ffaa00' : '#ff4444';
+
+    const durText  = document.getElementById('hangar-probe-dur-text');
+    const durFill  = document.getElementById('hangar-probe-dur-fill');
+    const scrapEl  = document.getElementById('hangar-probe-scrap');
+    const h3El     = document.getElementById('hangar-probe-h3');
+    const amtInput = document.getElementById('hangar-probe-repair-amount');
+    const repBtn   = document.getElementById('hangar-probe-repair-btn');
+    const costEl   = document.getElementById('hangar-probe-repair-cost');
+    const warnEl   = document.getElementById('hangar-probe-repair-warn');
+
+    if (!durText) return; // modal not in DOM yet
+
+    const scrap = Math.floor(STATE.inventory['Scrap'] || 0);
+    const h3    = Math.floor(STATE.inventory['Helium3'] || 0);
+    const isDeployed = STATE.ships.some(s => s.type === 'probe' && ['outbound','scanning','return'].includes(s.phase));
+    const missing = PROBE_MAX - dur;
+    const maxRepair = Math.min(missing, scrap, h3);
+
+    durText.textContent  = dur + '/1000';
+    durText.style.color  = col;
+    durFill.style.width  = pct + '%';
+    durFill.style.background = col;
+    if (scrapEl) scrapEl.textContent = scrap;
+    if (h3El)    h3El.textContent    = h3;
+
+    if (amtInput) {
+        amtInput.max   = Math.max(1, maxRepair);
+        amtInput.value = Math.max(1, Math.min(parseInt(amtInput.value, 10) || 1, maxRepair));
+    }
+
+    const amt = parseInt(amtInput ? amtInput.value : 1, 10) || 1;
+    if (costEl) costEl.textContent = amt > 0 ? `(${amt} Scrap + ${amt} $H3)` : '';
+
+    let warn = '';
+    if (dur <= 0)       warn = '⚠ Probe destroyed! Repair required before next launch.';
+    else if (dur < 100) warn = '⚠ Critical integrity — probe at risk!';
+    else if (isDeployed) warn = 'ℹ Repair unavailable while probe is deployed.';
+    if (warnEl) warnEl.textContent = warn;
+
+    const canRepair = !isDeployed && missing > 0 && maxRepair >= 1;
+    if (repBtn) {
+        repBtn.disabled = !canRepair;
+        repBtn.style.opacity = canRepair ? '1' : '0.4';
+        repBtn.style.cursor  = canRepair ? 'pointer' : 'not-allowed';
+    }
+}
+
 function renderProficiency() {
 const c = document.getElementById('proficiency-content'); if(!c) return; let html = `<div style="background:rgba(255,255,255,0.02); padding:10px; border:1px solid rgba(255,255,255,0.1); margin-bottom:10px;"><div style="color:var(--stamina); font-weight:bold; margin-bottom:5px;">PHYSICAL CONDITION</div><div style="display:flex; justify-content:space-between; font-size:10px; color:#aaa; margin-bottom:5px;"><span>STAMINA</span><span>${Math.floor(STATE.stamina.val)} / ${STATE.stamina.max}</span></div><div style="width:100%; height:6px; background:#111; border:1px solid #333;"><div style="height:100%; width:${(STATE.stamina.val/STATE.stamina.max)*100}%; background:var(--stamina);"></div></div></div>`;
 html += `<div style="background:rgba(255,255,255,0.02); padding:10px; border:1px solid rgba(255,255,255,0.1);"><div style="color:var(--xp); font-weight:bold; margin-bottom:10px;">OPERATOR SKILLS</div>`;
@@ -3159,12 +3255,40 @@ STATE.inventory = data.inventory;
 STATE.hangar = data.hangar;
 STATE.stamina = data.stamina;
 STATE.ships = data.ships;
+if (typeof data.probeDurability === 'number') STATE.probeDurability = data.probeDurability;
 log(`CMD: ${t.toUpperCase()} launched to ${STATE.selectedObj.name}.`);
 closeModal(null, true);
 updateUI();
 } catch(e) {
 log(`CMD ERR: Launch request failed — ${e.message}`);
 }
+}
+
+async function repairProbe() {
+    if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+    const amtInput = document.getElementById('hangar-probe-repair-amount');
+    const amount   = parseInt(amtInput ? amtInput.value : 1, 10);
+    if (isNaN(amount) || amount < 1) return log('PROBE REPAIR ERR: Invalid amount.');
+    const isDeployed = STATE.ships.some(s => s.type === 'probe' && ['outbound','scanning','return'].includes(s.phase));
+    if (isDeployed) return log('PROBE REPAIR ERR: Cannot repair while probe is deployed.');
+    log('CMD: Requesting probe hull repair...');
+    try {
+        const res = await fetch(`${API_URL}/game/probe/repair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ amount })
+        });
+        const data = await res.json();
+        if (!res.ok) return log(`PROBE REPAIR ERR: ${data.msg || 'Server error.'}`);
+        if (data.inventory) STATE.inventory = data.inventory;
+        if (typeof data.probeDurability === 'number') STATE.probeDurability = data.probeDurability;
+        log(`PROBE: Hull repaired +${amount} integrity. Durability: ${STATE.probeDurability}/1000.`);
+        renderHangarProbeRepair();
+        updateUI();
+        actionSave();
+    } catch(e) {
+        log(`PROBE REPAIR ERR: Request failed — ${e.message}`);
+    }
 }
 
 function startBuild(t, s) { if(STATE.power.gridStatus==='BLACKOUT') return log("ERR: NO POWER."); if(!useStamina(s)) return; const sp = SPECS[t]; let ok=true;
@@ -3231,6 +3355,7 @@ return log(`PROBE ERR: ${data.msg || 'Server error.'}`);
 STATE.ships = data.ships;
 STATE.hangar = data.hangar;
 if (data.planetary_exploration) STATE.skills.planetary_exploration = data.planetary_exploration;
+if (typeof data.probeDurability === 'number') STATE.probeDurability = data.probeDurability;
 log('LOG: Probe returned to base. Hangar updated.');
 updateUI();
 actionSave();
@@ -4075,6 +4200,17 @@ return `
 
 // UPDATE FLEET COUNTS (Top of Right Panel)
 if(UI_CACHE['c-probe']) UI_CACHE['c-probe'].innerText = STATE.hangar.probe;
+// ── Probe hull integrity bar (Fleet Link panel) ──────────────────────────
+{
+    const PROBE_MAX = 1000;
+    const dur = typeof STATE.probeDurability === 'number' ? STATE.probeDurability : PROBE_MAX;
+    const pct = Math.max(0, Math.min(100, (dur / PROBE_MAX) * 100));
+    const col = dur > 500 ? '#00ffaa' : dur > 200 ? '#ffaa00' : '#ff4444';
+    const durTextEl = document.getElementById('probe-dur-text');
+    const durFillEl = document.getElementById('probe-dur-fill');
+    if (durTextEl) { durTextEl.textContent = dur + '/1000'; durTextEl.style.color = col; }
+    if (durFillEl) { durFillEl.style.width = pct + '%'; durFillEl.style.background = col; }
+}
 if(UI_CACHE['c-miner']) UI_CACHE['c-miner'].innerText = STATE.hangar.miner;
 if(UI_CACHE['c-hauler']) UI_CACHE['c-hauler'].innerText = STATE.hangar.hauler;
 if(UI_CACHE['c-gas']) UI_CACHE['c-gas'].innerText = STATE.hangar.gas;
