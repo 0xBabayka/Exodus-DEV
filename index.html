@@ -780,9 +780,49 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
 <div style="text-align:left;">
 <div style="color:var(--xp); font-weight:bold;">SCAVENGING LICENSE</div>
-<div style="font-size:9px; color:#889;">Auth Key to unlock higher skill tiers.</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Scavenging skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buyLicense()">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('scavenging')">BUY (1 DATA CORE)</button>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
+<div style="text-align:left;">
+<div style="color:var(--agri); font-weight:bold;">AGRICULTURE LICENSE</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Agriculture skill tiers.</div>
+</div>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('agriculture')">BUY (1 DATA CORE)</button>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
+<div style="text-align:left;">
+<div style="color:var(--copper); font-weight:bold;">METALLURGY LICENSE</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Metallurgy skill tiers.</div>
+</div>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('metallurgy')">BUY (1 DATA CORE)</button>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
+<div style="text-align:left;">
+<div style="color:var(--chem); font-weight:bold;">CHEMISTRY LICENSE</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Chemistry skill tiers.</div>
+</div>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('chemistry')">BUY (1 DATA CORE)</button>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
+<div style="text-align:left;">
+<div style="color:var(--neon); font-weight:bold;">ENGINEERING LICENSE</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Engineering skill tiers.</div>
+</div>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('engineering')">BUY (1 DATA CORE)</button>
+</div>
+
+<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
+<div style="text-align:left;">
+<div style="color:var(--probe); font-weight:bold;">PLANETARY EXPLORATION LICENSE</div>
+<div style="font-size:9px; color:#889;">Auth Key to unlock higher Planetary Exploration skill tiers.</div>
+</div>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('planetary_exploration')">BUY (1 DATA CORE)</button>
 </div>
 
 </div>
@@ -1547,7 +1587,7 @@ CO2: 0, Nitrogen: 0, Argon: 0, Neon: 0, Krypton: 0, Xenon: 0, Pt: 5, Gas: 0, Scr
 Soil: 100, "Seeds: Sprouts": 100, "Seeds: Amaranth": 5, "Seeds: Guarana": 5, "Seeds: Potato": 5, "Seeds: Maize": 5, Food: 0, Regolith: 0, "Biological Waste": 0, Methane: 0, O2: 0,
 Snack: 0, Meal: 0, Feast: 0, "Energy Bar": 10, Barite: 0,
 "Aluminium Ore": 0, "Copper Ore": 0, "Titanium Ore": 0, Halite: 0, "Liquid CH4": 0, "Liquid O2": 0, "Rocket Fuel": 100, PVC: 0, Perchlorate: 0, PLA: 0, "Empty Battery": 0, "Full Battery": 0, Amaranth: 0, Guarana: 0, Potato: 0, "Fermented Amaranth": 0, "Fermented Guarana": 0,
-"Scavenging License": 0, Worms: 0, "Aluminium Plate": 0, "Titanium Plate": 0, "Machined Parts": 0, "Moving Parts": 0, "Roasted Guarana": 0, "Ground Guarana": 0, "Energy Isotonic": 0, "Raw silicon": 0, "Electric silicon": 0, "Structural Part": 0, "PVC Pipe": 0, "Electronic Parts": 0,
+"Scavenging License": 0, "Agriculture License": 0, "Metallurgy License": 0, "Chemistry License": 0, "Engineering License": 0, "Planetary Exploration License": 0, Worms: 0, "Aluminium Plate": 0, "Titanium Plate": 0, "Machined Parts": 0, "Moving Parts": 0, "Roasted Guarana": 0, "Ground Guarana": 0, "Energy Isotonic": 0, "Raw silicon": 0, "Electric silicon": 0, "Structural Part": 0, "PVC Pipe": 0, "Electronic Parts": 0,
 Helium3: 0, // ADDED: New Currency
 "Broken Data": 0
 },
@@ -1947,7 +1987,7 @@ if (baseBody.type !== 'BASE') { baseBody.type = 'BASE'; log("SYS: Base Protocol 
 STATE.bodies.push({ id: 4, name: "J-03", dist: 1.5, speed: 2.4, color: "#f40", size: 9, type: "BASE", angle: 0 });
 log("SYS: Base Reconstruction Complete.");
 }
-const items = ['Snack', 'Meal', 'Feast', 'Energy Bar', 'Biological Waste', 'Methane', 'O2', 'Aluminium Ore', 'Copper Ore', 'Titanium Ore', 'Halite', 'Liquid CH4', 'Liquid O2', 'Rocket Fuel', 'PVC', 'Perchlorate', 'PLA', 'Empty Battery', 'Full Battery', 'Amaranth', 'Seeds: Amaranth', 'Guarana', 'Seeds: Guarana', 'Fermented Amaranth', 'Fermented Guarana', 'Scavenging License', 'Worms', 'Potato', 'Seeds: Potato', 'Seeds: Maize', 'Aluminium Plate', 'Titanium Plate', 'Machined Parts', 'Moving Parts', 'Roasted Guarana', 'Ground Guarana', 'Energy Isotonic', 'Raw silicon', 'Electric silicon', 'Structural Part', 'PVC Pipe', 'Electronic Parts', 'Broken Data'];
+const items = ['Snack', 'Meal', 'Feast', 'Energy Bar', 'Biological Waste', 'Methane', 'O2', 'Aluminium Ore', 'Copper Ore', 'Titanium Ore', 'Halite', 'Liquid CH4', 'Liquid O2', 'Rocket Fuel', 'PVC', 'Perchlorate', 'PLA', 'Empty Battery', 'Full Battery', 'Amaranth', 'Seeds: Amaranth', 'Guarana', 'Seeds: Guarana', 'Fermented Amaranth', 'Fermented Guarana', 'Scavenging License', 'Agriculture License', 'Metallurgy License', 'Chemistry License', 'Engineering License', 'Planetary Exploration License', 'Worms', 'Potato', 'Seeds: Potato', 'Seeds: Maize', 'Aluminium Plate', 'Titanium Plate', 'Machined Parts', 'Moving Parts', 'Roasted Guarana', 'Ground Guarana', 'Energy Isotonic', 'Raw silicon', 'Electric silicon', 'Structural Part', 'PVC Pipe', 'Electronic Parts', 'Broken Data'];
 items.forEach(i => { if(STATE.inventory[i] === undefined) STATE.inventory[i] = 0; });
 // ADDED: Initialize Helium3 if missing
 if (STATE.inventory.Helium3 === undefined) STATE.inventory.Helium3 = 0;
@@ -2729,7 +2769,8 @@ log(`SKILL: ${key.replace(/_/g, ' ').toUpperCase()} Proficiency Locked at LVL ${
 async function unlockSkill(skillKey) {
 const s = STATE.skills[skillKey];
 if (!s || !s.locked) return;
-if ((STATE.inventory["Scavenging License"] || 0) < 1) return log("ERR: Missing License.");
+const requiredLicense = SKILL_LICENSE_MAP[skillKey] || 'Scavenging License';
+if ((STATE.inventory[requiredLicense] || 0) < 1) return log(`ERR: Missing ${requiredLicense}.`);
 if (!AUTH_TOKEN) return log("ERR: Not authenticated.");
 try {
 const res = await fetch(`${API_URL}/game/skill/unlock`, {
@@ -3982,18 +4023,28 @@ console.error("UI ERR:", e);
 
 // --- NEW P2P MARKET LOGIC (FIXED: NOW CONNECTS TO API) ---
 
-async function buyLicense() {
+// --- LICENSE PURCHASE ---
+const SKILL_LICENSE_MAP = {
+'scavenging': 'Scavenging License',
+'agriculture': 'Agriculture License',
+'metallurgy': 'Metallurgy License',
+'chemistry': 'Chemistry License',
+'engineering': 'Engineering License',
+'planetary_exploration': 'Planetary Exploration License'
+};
+
+async function buySkillLicense(skillKey) {
 if ((STATE.inventory['Data Core'] || 0) < 1) return log("MARKET: Insufficient Data Core (Need 1).");
+if (!SKILL_LICENSE_MAP[skillKey]) return log("MARKET: Unknown skill key.");
 try {
-const res = await fetch(`${API_URL}/market/license`, {
+const res = await fetch(`${API_URL}/market/license/${skillKey}`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN }
 });
 const data = await res.json();
-if(!res.ok) throw new Error(data.msg || "TRANSACTION FAILED");
-
-STATE.inventory = data.inventory; // Sync inventory
-log("MARKET: Scavenging License acquired.");
+if (!res.ok) throw new Error(data.msg || "TRANSACTION FAILED");
+STATE.inventory = data.inventory;
+log(`MARKET: ${SKILL_LICENSE_MAP[skillKey]} acquired.`);
 renderWarehouse();
 updateUI();
 actionSave();
@@ -4001,6 +4052,9 @@ actionSave();
 log(`MKT ERR: ${e.message}`);
 }
 }
+
+// Legacy wrapper kept for compatibility
+async function buyLicense() { await buySkillLicense('scavenging'); }
 
 function initMarket() {
 if(!STATE.market) STATE.market = {};
@@ -4091,7 +4145,7 @@ if(!sel) return;
 sel.innerHTML = '<option value="" disabled selected>SELECT ITEM</option>';
 
 // Filter items that we actually have in inventory
-const blacklist = ["Helium3", "Scavenging License"]; // Items you cannot sell
+const blacklist = ["Helium3", "Scavenging License", "Agriculture License", "Metallurgy License", "Chemistry License", "Engineering License", "Planetary Exploration License"]; // Items you cannot sell
 Object.keys(STATE.inventory).sort().forEach(key => {
 if(STATE.inventory[key] > 0 && !blacklist.includes(key)) {
 const opt = document.createElement('option');
@@ -4246,8 +4300,7 @@ function populateBuyOrderSelect() {
 const sel = document.getElementById('p2p-buy-item-select');
 if(!sel) return;
 sel.innerHTML = '<option value="" disabled selected>SELECT ITEM</option>';
-const blacklist = ["Helium3", "Scavenging License"];
-// Always include Broken Data even if player has 0 (rare drop)
+const blacklist = ["Helium3", "Scavenging License", "Agriculture License", "Metallurgy License", "Chemistry License", "Engineering License", "Planetary Exploration License"];
 const alwaysAvailable = ["Broken Data"];
 const allItems = new Set([...Object.keys(STATE.inventory), ...alwaysAvailable]);
 Array.from(allItems).sort().forEach(key => {
