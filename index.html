@@ -3196,6 +3196,7 @@ return log(`SCAN ERR: ${data.msg || 'Server error.'}`);
 STATE.ships = data.ships;
 STATE.bodies = data.bodies;
 if (data.inventory) STATE.inventory = data.inventory;
+if (data.planetary_exploration) STATE.skills.planetary_exploration = data.planetary_exploration;
 let scanMsg = `DATA: ${target.name} scanned. Data acquired. Returning.`;
 if (data.brokenDataDrop > 0) { scanMsg += ` [+${data.brokenDataDrop} Broken Data]`; }
 log(scanMsg);
@@ -3229,6 +3230,7 @@ return log(`PROBE ERR: ${data.msg || 'Server error.'}`);
 // Server confirmed: sync STATE from authoritative response
 STATE.ships = data.ships;
 STATE.hangar = data.hangar;
+if (data.planetary_exploration) STATE.skills.planetary_exploration = data.planetary_exploration;
 log('LOG: Probe returned to base. Hangar updated.');
 updateUI();
 actionSave();
