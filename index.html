@@ -2367,17 +2367,22 @@ drainBuffer(CAD_CFG.powerCost);
 s.active = true; s.startTime = now(); s.duration = CAD_CFG.duration;
 log(`ATMOS: C.A.D. Cell ${id+1} started.`); renderCad(); updateUI(); actionSave();
 }
-function completeCad(s) {
-s.active = false;
-let msg = `CAD ${s.id+1} DONE: `;
-let c = Math.floor(Math.random()*4)+2; STATE.inventory.CO2 = (STATE.inventory.CO2||0)+c; msg+=`${c} CO2`;
-if(Math.random() < 0.1111) { let b=Math.floor(Math.random()*10)+1; STATE.inventory.CO2+=b; msg+=` (+${b} Bonus)`; }
-if(Math.random() < 0.15) { let n=Math.floor(Math.random()*2)+1; STATE.inventory.Nitrogen=(STATE.inventory.Nitrogen||0)+n; msg+=`, ${n} N2`; }
-if(Math.random() < 0.10) { let a=Math.floor(Math.random()*2)+1; STATE.inventory.Argon=(STATE.inventory.Argon||0)+a; msg+=`, ${a} Ar`; }
-if(Math.random() < 0.05) { let ne=Math.floor(Math.random()*2)+1; STATE.inventory.Neon=(STATE.inventory.Neon||0)+ne; msg+=`, ${ne} Ne`; }
-if(Math.random() < 0.03) { let kr=Math.floor(Math.random()*2)+1; STATE.inventory.Krypton=(STATE.inventory.Krypton||0)+kr; msg+=`, ${kr} Kr`; }
-if(Math.random() < 0.02) { let xe=Math.floor(Math.random()*2)+1; STATE.inventory.Xenon=(STATE.inventory.Xenon||0)+xe; msg+=`, ${xe} Xe`; }
-log(msg); renderCad(); updateUI(); actionSave();
+async function completeCad(s) {
+s.active = false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('CAD ERR: Not authenticated.'); renderCad(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-cad`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`CAD ERR: ${data.msg || 'Server error.'}`); renderCad(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.chemistry) STATE.skills.chemistry = data.chemistry;
+log(data.msg || `CAD ${s.id+1} DONE.`);
+} catch (e) { log(`CAD ERR: ${e.message}`); }
+renderCad(); updateUI(); actionSave();
 }
 function renderCad() {
 const c = document.getElementById('cad-container'); if(!c) return;
@@ -2400,10 +2405,22 @@ if(!useStamina(FILTER_CFG.cost.stamina)) return;
 drainBuffer(FILTER_CFG.cost.power); STATE.inventory["Ice water"]-=FILTER_CFG.cost.ice;
 s.active=true; s.startTime=now(); s.duration=FILTER_CFG.duration; log(`REF: Cell ${id+1} filtering.`); renderWaterFilter(); updateUI(); actionSave();
 }
-function completeWaterFilter(s) {
-s.active=false; STATE.inventory.Water=(STATE.inventory.Water||0)+FILTER_CFG.output.water;
-STATE.inventory.Regolith=(STATE.inventory.Regolith||0)+FILTER_CFG.output.regolith;
-log(`REF: Cell ${s.id+1} done. +Water, +Regolith.`); renderWaterFilter(); updateUI(); actionSave();
+async function completeWaterFilter(s) {
+s.active=false; // prevent re-trigger in game loop
+if (!AUTH_TOKEN) { log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-water-filter`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.chemistry) STATE.skills.chemistry = data.chemistry;
+log(data.msg || `REF: Cell ${s.id+1} done. +Water, +Regolith.`);
+} catch (e) { log(`REF ERR: ${e.message}`); }
+renderWaterFilter(); updateUI(); actionSave();
 }
 function startFermentation(mode) {
 const s = STATE.refinery.fermenterSlot; const cfg = FERMENT_CFG[mode];
