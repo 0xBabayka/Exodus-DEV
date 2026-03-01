@@ -2836,7 +2836,7 @@ if(load > 0) STATE.power.consumptionRate=load;
 let d = (gen - load) * dt;
 if(d > 0) { STATE.power.gridStatus="ONLINE"; for(let b of gBats) { if(d<=0) break; let s = (POWER_CFG.batteryCap*(1-(b.wear/100))) - b.charge;
 if(s>0){ let a=Math.min(s,d); b.charge+=a; d-=a; }} } else { let dr = Math.abs(d); for(let i=gBats.length-1; i>=0; i--) { if(dr<=0)break;
-let b=gBats[i]; if(b.charge>0){ let t=Math.min(b.charge, dr); b.charge-=t; dr-=t; }} STATE.power.gridStatus = (gBats.reduce((a,b)=>a+b.charge,0) <= 0.001 && dr>0) ? "BLACKOUT" : "DRAINING";
+let b=gBats[i]; if(b.charge>0){ let t=Math.min(b.charge, dr); b.charge-=t; dr-=t; }} STATE.power.gridStatus = (gBats.reduce((a,b)=>a+b.charge,0) <= 0.001 && dr>0) ? "BLACKOUT" : "ONLINE";
 }
 gBats.forEach(b => { /* wear is calculated server-side only */ });
 }
@@ -3898,7 +3898,7 @@ if(UI_CACHE['grid-load']) { const gBats = STATE.power.batteries.filter(b => b.lo
 if (gBats.length > 0) { const totalWear = gBats.reduce((a,b) => a + b.wear, 0);
 eff = 100 - (totalWear / gBats.length); } UI_CACHE['grid-load'].innerText = eff.toFixed(1) + "%"; }
 const gs = UI_CACHE['grid-status-text']; const fb = UI_CACHE['flux-bar']; if(gs && fb) { gs.innerText=STATE.power.gridStatus; fb.style.width=`${fl}%`; if(STATE.power.gridStatus==='ONLINE') { gs.style.color="var(--success)"; fb.style.background="var(--neon)";
-} else if(STATE.power.gridStatus==='DRAINING') { gs.style.color="var(--warning)"; fb.style.background="var(--warning)"; } else { gs.style.color="var(--danger)"; fb.style.background="#333"; } }
+} else { gs.style.color="var(--danger)"; fb.style.background="#333"; } }
 const aps = UI_CACHE['active-systems-panel']; if(aps) { let h = '<div class="header" style="background:transparent; border-color:rgba(255,255,255,0.1); font-size:9px; color:#889;">ACTIVE SYSTEMS</div>'; let hasActive = false;
 const tag = '<span style="color:#4f4; float:right; text-shadow:0 0 5px #4f4;">LAUNCHED</span>';
 if(STATE.cad.slots.some(s=>s.active)) { h += `<div style="padding:2px; border-bottom:1px solid rgba(255,255,255,0.05); color:#ccc; font-size:9px;">🌬️ ATMOS. DISTILLER ${tag}</div>`; hasActive = true;
