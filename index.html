@@ -356,10 +356,82 @@ animation: pulse 1s infinite; white-space: nowrap;
 flex: 1; background: rgba(0,0,0,0.3); border: 1px solid #334;
 color: #fff; padding: 5px; font-family: monospace;
 }
+
+/* --- UPDATE REQUIRED OVERLAY --- */
+#update-overlay {
+display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+background: rgba(0, 0, 0, 0.85); z-index: 99999;
+justify-content: center; align-items: center;
+backdrop-filter: blur(6px);
+}
+#update-overlay.visible { display: flex; }
+.update-box {
+width: 380px; padding: 32px 28px; text-align: center;
+background: rgba(8, 14, 20, 0.98);
+border: 1px solid var(--mars);
+box-shadow: 0 0 40px rgba(255, 94, 0, 0.25), 0 0 80px rgba(255, 94, 0, 0.08);
+position: relative; overflow: hidden;
+}
+.update-box::before {
+content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+background: linear-gradient(90deg, transparent, var(--mars), transparent);
+animation: scan-h 3s linear infinite;
+}
+@keyframes scan-h {
+0% { transform: translateX(-100%); }
+100% { transform: translateX(100%); }
+}
+.update-icon { font-size: 36px; margin-bottom: 12px; animation: pulse 1.5s ease-in-out infinite; }
+.update-title {
+font-size: 15px; font-weight: bold; color: var(--mars);
+letter-spacing: 2px; text-transform: uppercase;
+text-shadow: 0 0 10px rgba(255, 94, 0, 0.6); margin-bottom: 8px;
+}
+.update-version-row {
+display: flex; justify-content: center; align-items: center; gap: 12px;
+margin: 14px 0; font-size: 11px; font-family: 'Consolas', monospace;
+}
+.update-ver-badge { padding: 3px 10px; border-radius: 2px; font-weight: bold; letter-spacing: 1px; }
+.update-ver-badge.old { background: rgba(255, 51, 51, 0.15); border: 1px solid var(--danger); color: var(--danger); }
+.update-ver-badge.new { background: rgba(0, 229, 255, 0.12); border: 1px solid var(--neon); color: var(--neon); }
+.update-arrow { color: #556; font-size: 14px; }
+.update-desc {
+font-size: 10px; color: #8daab9; line-height: 1.6; margin-bottom: 20px;
+border: 1px solid rgba(255, 94, 0, 0.15); background: rgba(255, 94, 0, 0.04); padding: 8px 12px;
+}
+.update-btn {
+width: 100%; padding: 11px; font-size: 12px; font-weight: bold; letter-spacing: 2px;
+cursor: pointer; border-radius: 2px;
+background: linear-gradient(180deg, rgba(255, 94, 0, 0.25), rgba(255, 94, 0, 0.1));
+border: 1px solid var(--mars); color: #fff; font-family: 'Consolas', monospace;
+text-transform: uppercase; transition: all 0.2s; box-shadow: 0 0 10px rgba(255, 94, 0, 0.2);
+}
+.update-btn:hover { background: rgba(255, 94, 0, 0.4); box-shadow: 0 0 20px rgba(255, 94, 0, 0.4); color: #fff; }
+.update-footer { margin-top: 10px; font-size: 9px; color: #334; letter-spacing: 1px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body id="body">
+
+<!-- UPDATE REQUIRED OVERLAY -->
+<div id="update-overlay">
+<div class="update-box">
+<div class="update-icon">⚠</div>
+<div class="update-title">UPDATE REQUIRED</div>
+<div id="update-version-row" class="update-version-row">
+<span class="update-ver-badge old" id="upd-old-ver">—</span>
+<span class="update-arrow">▶</span>
+<span class="update-ver-badge new" id="upd-new-ver">—</span>
+</div>
+<div class="update-desc">
+A new version of EXODUS//PRIME has been deployed.<br>
+Reload the page to apply the latest update and avoid<br>
+compatibility issues with the server.
+</div>
+<button class="update-btn" data-fn="location_reload">⟳ &nbsp;RELOAD &amp; UPDATE</button>
+<div class="update-footer">EXODUS//PRIME — FORGE-7 COMMAND TERMINAL</div>
+</div>
+</div>
 
 <div id="auth-overlay">
 <div class="auth-box">
@@ -368,14 +440,14 @@ color: #fff; padding: 5px; font-family: monospace;
 <div id="login-form">
 <input type="text" id="l-user" class="auth-input" placeholder="OPERATOR ID">
 <input type="password" id="l-pass" class="auth-input" placeholder="PASSCODE">
-<button class="auth-btn" onclick="login()">INITIALIZE LINK</button>
-<div class="auth-toggle" onclick="toggleAuth('register')">NEW OPERATOR? REGISTER CLEARANCE</div>
+<button class="auth-btn" data-fn="login">INITIALIZE LINK</button>
+<div class="auth-toggle" data-fn="toggleAuth" data-args='["register"]'>NEW OPERATOR? REGISTER CLEARANCE</div>
 </div>
 <div id="register-form" style="display:none;">
 <input type="text" id="r-user" class="auth-input" placeholder="NEW OPERATOR ID">
 <input type="password" id="r-pass" class="auth-input" placeholder="SET PASSCODE">
-<button class="auth-btn" onclick="register()">ESTABLISH IDENTITY</button>
-<div class="auth-toggle" onclick="toggleAuth('login')">EXISTING OPERATOR? LOGIN</div>
+<button class="auth-btn" data-fn="register">ESTABLISH IDENTITY</button>
+<div class="auth-toggle" data-fn="toggleAuth" data-args='["login"]'>EXISTING OPERATOR? LOGIN</div>
 </div>
 </div>
 </div>
@@ -391,16 +463,16 @@ color: #fff; padding: 5px; font-family: monospace;
 <span><span class="tb-val" id="sys-name">SECTOR-42</span></span>
 <span>FLUX: <span class="tb-val" id="top-flux-val">--%</span></span>
 <span>STAM: <span class="tb-val" id="stamina-val" style="color:var(--stamina)">100/100</span></span>
-<button id="btn-daily" class="nav-btn" style="font-size:9px; padding:1px 6px; height:20px; border-color:var(--warning); color:var(--warning);" onclick="claimDailyReward()">...LM</button>
-<button id="btn-missions" class="nav-btn" style="font-size:9px; padding:1px 6px; height:20px; border-color:#d400ff; color:#d400ff;" onclick="openDailyMissions()">MISSIONS</button>
+<button id="btn-daily" class="nav-btn" style="font-size:9px; padding:1px 6px; height:20px; border-color:var(--warning); color:var(--warning);" data-fn="claimDailyReward">...LM</button>
+<button id="btn-missions" class="nav-btn" style="font-size:9px; padding:1px 6px; height:20px; border-color:#d400ff; color:#d400ff;" data-fn="openDailyMissions">MISSIONS</button>
 </div>
 
 <div class="top-center-group">
-<button class="nav-btn" onclick="openProficiency()">🎓 PROFICIENCY</button>
-<button class="nav-btn" onclick="openBaseModalFromUI()">🏠 BASE</button>
-<button class="nav-btn" onclick="openHangar()">🚀 HANGAR</button>
-<button class="nav-btn" onclick="openWarehouse()">📦 STORAGE</button>
-<button class="nav-btn" onclick="openMarket()">⚖️ MARKET</button>
+<button class="nav-btn" data-fn="openProficiency">🎓 PROFICIENCY</button>
+<button class="nav-btn" data-fn="openBaseModalFromUI">🏠 BASE</button>
+<button class="nav-btn" data-fn="openHangar">🚀 HANGAR</button>
+<button class="nav-btn" data-fn="openWarehouse">📦 STORAGE</button>
+<button class="nav-btn" data-fn="openMarket">⚖️ MARKET</button>
 </div>
 
 <div class="top-btn-group">
@@ -409,7 +481,7 @@ color: #fff; padding: 5px; font-family: monospace;
 <span id="top-h3-val" style="color:#fff; margin-left:5px; font-weight:bold; font-size:10px;">0</span>
 </div>
 
-<button class="nav-btn danger" onclick="logout()" style="border-color:var(--danger); color:var(--danger)">LOGOUT</button>
+<button class="nav-btn danger" data-fn="logout" style="border-color:var(--danger); color:var(--danger)">LOGOUT</button>
 <span>UTC: <span class="tb-val" id="sys-time">00:00:00</span></span>
 </div>
 </div>
@@ -418,7 +490,7 @@ color: #fff; padding: 5px; font-family: monospace;
 <div class="header">FORGE-7 COMMAND</div>
 <div style="margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
 <div style="font-size:9px; color:#889; margin-bottom:5px;">LOCAL OPERATIONS</div>
-<button class="scav-btn" id="btn-scavenge" onclick="scavenge()">
+<button class="scav-btn" id="btn-scavenge" data-fn="scavenge">
 SCAVENGE SECTOR <span style="font-size:9px; opacity:0.7">[-1 Stam / -1 Energy]</span>
 </button>
 <div id="scav-progress" style="height:2px; width:0%; background:var(--xp); transition:width 0.1s; box-shadow: 0 0 5px var(--xp);"></div>
@@ -483,16 +555,16 @@ SCAVENGE SECTOR <span style="font-size:9px; opacity:0.7">[-1 Stam / -1 Energy]</
 <div id="comms-panel" class="panel interactive draggable" style="display:flex; flex-direction:column;">
 <div class="header" style="justify-content:space-between; cursor:move;"><span>COMMS</span></div>
 <div style="display:flex; gap:0; border-bottom:1px solid rgba(255,255,255,0.07); margin-bottom:4px;">
-<button class="chat-tab-btn active" id="comms-tab-general" onclick="switchCommsTab('general')">GENERAL</button>
-<button class="chat-tab-btn trade" id="comms-tab-trade" onclick="switchCommsTab('trade')">TRADE</button>
-<button class="chat-tab-btn" id="comms-tab-syslog" onclick="switchCommsTab('syslog')">SYSTEM LOG</button>
+<button class="chat-tab-btn active" id="comms-tab-general" data-fn="switchCommsTab" data-args='["general"]'>GENERAL</button>
+<button class="chat-tab-btn trade" id="comms-tab-trade" data-fn="switchCommsTab" data-args='["trade"]'>TRADE</button>
+<button class="chat-tab-btn" id="comms-tab-syslog" data-fn="switchCommsTab" data-args='["syslog"]'>SYSTEM LOG</button>
 </div>
 <div id="comms-view-general" style="display:flex; flex-direction:column; flex:1; min-height:0;">
 <div id="chat-messages-general" class="chat-messages"></div>
 <div id="chat-err-general" class="chat-err"></div>
 <div class="chat-input-row">
 <input id="chat-input-general" class="chat-input" maxlength="200" placeholder="message..." onkeydown="if(event.key==='Enter')sendChatMsg('general')">
-<button class="chat-send-btn" onclick="sendChatMsg('general')">SEND</button>
+<button class="chat-send-btn" data-fn="sendChatMsg" data-args='["general"]'>SEND</button>
 </div>
 </div>
 <div id="comms-view-trade" style="display:none; flex-direction:column; flex:1; min-height:0;">
@@ -500,7 +572,7 @@ SCAVENGE SECTOR <span style="font-size:9px; opacity:0.7">[-1 Stam / -1 Energy]</
 <div id="chat-err-trade" class="chat-err"></div>
 <div class="chat-input-row">
 <input id="chat-input-trade" class="chat-input" maxlength="200" placeholder="trade offer..." onkeydown="if(event.key==='Enter')sendChatMsg('trade')">
-<button class="chat-send-btn" onclick="sendChatMsg('trade')" style="border-color:#665500; color:var(--warning);">SEND</button>
+<button class="chat-send-btn" data-fn="sendChatMsg" data-args='["trade"]' style="border-color:#665500; color:var(--warning);">SEND</button>
 </div>
 </div>
 <div id="comms-view-syslog" style="display:none; flex-direction:column; flex:1; min-height:0;">
@@ -514,16 +586,16 @@ SCAVENGE SECTOR <span style="font-size:9px; opacity:0.7">[-1 Stam / -1 Energy]</
 <div id="modal-overlay" class="modal-overlay">
 <div id="modal-base" class="modal draggable" style="display:none; border-color: var(--neon);">
 <div class="header" style="font-size:14px;">FORGE-7 INDUSTRIAL COMPLEX</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 
 <div style="margin-bottom:10px; border-bottom:1px solid var(--panel-border); padding-bottom:5px;">
-<button class="tab-btn active" id="tab-btn-refinery" onclick="switchTab('refinery')">REFINERY</button>
-<button class="tab-btn green" id="tab-btn-greenhouse" onclick="switchTab('greenhouse')">GREENHOUSE</button>
-<button class="tab-btn orange" id="tab-btn-kitchen" onclick="switchTab('kitchen')">KITCHEN</button>
-<button class="tab-btn purple" id="tab-btn-chemlab" onclick="switchTab('chemlab')">CHEMICAL LAB</button>
-<button class="tab-btn" id="tab-btn-factory" onclick="switchTab('factory')">FACTORY</button>
-<button class="tab-btn" id="tab-btn-printer" onclick="switchTab('printer')">IND. 3D PRINTER</button>
-<button class="tab-btn red" id="tab-btn-fuel" onclick="switchTab('fuel')">ROCKET FUEL</button>
+<button class="tab-btn active" id="tab-btn-refinery" data-fn="switchTab" data-args='["refinery"]'>REFINERY</button>
+<button class="tab-btn green" id="tab-btn-greenhouse" data-fn="switchTab" data-args='["greenhouse"]'>GREENHOUSE</button>
+<button class="tab-btn orange" id="tab-btn-kitchen" data-fn="switchTab" data-args='["kitchen"]'>KITCHEN</button>
+<button class="tab-btn purple" id="tab-btn-chemlab" data-fn="switchTab" data-args='["chemlab"]'>CHEMICAL LAB</button>
+<button class="tab-btn" id="tab-btn-factory" data-fn="switchTab" data-args='["factory"]'>FACTORY</button>
+<button class="tab-btn" id="tab-btn-printer" data-fn="switchTab" data-args='["printer"]'>IND. 3D PRINTER</button>
+<button class="tab-btn red" id="tab-btn-fuel" data-fn="switchTab" data-args='["fuel"]'>ROCKET FUEL</button>
 </div>
 
 <div id="tab-refinery">
@@ -577,34 +649,34 @@ Methane (4h): 2 CO₂, 5 H₂, 10kW <span style="color:var(--stamina)">[-4 Stam]
 <div id="crop-select-overlay" class="crop-select-overlay" style="display:none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(5,8,10,0.95); z-index: 10; flex-direction: column; justify-content: center; padding: 20px; box-sizing: border-box;">
 <h3 style="color:var(--agri); text-align:center; margin-top:0;">SELECT CROP</h3>
 <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
-<button onclick="plantCrop('Sprouts')">
+<button data-fn="plantCrop" data-args='["Sprouts"]'>
 <div style="font-weight:bold; color:var(--success)">SPROUTS</div>
 <div style="font-size:9px; color:#889;">Time: 4h | Yield: 10-14 Food</div>
 <div style="font-size:9px; color:#aaa;">Cost: 1 Seed, 1 Water, 1 Soil, 1 Energy, 1 Stamina</div>
 </button>
-<button onclick="plantCrop('Potato')" style="margin-top:5px;">
+<button data-fn="plantCrop" data-args='["Potato"]' style="margin-top:5px;">
 <div style="font-weight:bold; color:#C49C48">POTATO</div>
 <div style="font-size:9px; color:#889;">Time: 8h | Yield: 25-55 Food</div>
 <div style="font-size:9px; color:#aaa;">Cost: 1 Seed, 5 Water, 4 Soil, 10 Energy, 3 Stamina</div>
 </button>
-<button onclick="plantCrop('Maize')" style="margin-top:5px;">
+<button data-fn="plantCrop" data-args='["Maize"]' style="margin-top:5px;">
 <div style="font-weight:bold; color:var(--maize)">MAIZE</div>
 <div style="font-size:9px; color:#889;">Time: 12h | Yield: 70-90 Food</div>
 <div style="font-size:9px; color:#aaa;">Cost: 1 Seed, 10 Water, 5 Soil, 15 Energy, 5 Stamina</div>
 </button>
 
-<button onclick="plantCrop('Amaranth')" style="margin-top:5px;">
+<button data-fn="plantCrop" data-args='["Amaranth"]' style="margin-top:5px;">
 <div style="font-weight:bold; color:#d400ff">AMARANTH</div>
 <div style="font-size:9px; color:#889;">Time: 12h | Yield: 10-20 Units</div>
 <div style="font-size:9px; color:#aaa;">Cost: 1 Seed, 10 Water, 3 Soil, 15 Energy, 3 Stamina</div>
 </button>
-<button onclick="plantCrop('Guarana')" style="margin-top:5px;">
+<button data-fn="plantCrop" data-args='["Guarana"]' style="margin-top:5px;">
 <div style="font-weight:bold; color:#cc0000">GUARANA</div>
 <div style="font-size:9px; color:#889;">Time: 24h | Yield: 20-30 Units</div>
 <div style="font-size:9px; color:#aaa;">Cost: 1 Seed, 10 Water, 4 Soil, 10 Energy, 5 Stamina</div>
 </button>
 </div>
-<button style="margin-top:10px; border-color:#555;" onclick="closeCropSelect()">CANCEL</button>
+<button style="margin-top:10px; border-color:#555;" data-fn="closeCropSelect">CANCEL</button>
 </div>
 </div>
 
@@ -613,15 +685,15 @@ Methane (4h): 2 CO₂, 5 H₂, 10kW <span style="color:var(--stamina)">[-4 Stam]
 <div style="background:rgba(255,255,255,0.02); padding:10px; border:1px solid rgba(255,255,255,0.1);">
 <div style="color:var(--kitchen); font-weight:bold; margin-bottom:10px;">RATION PREPARATION UNIT</div>
 <p style="font-size:10px; color:#889;">Convert raw biomass and water into edible rations. Caution: Generates biological waste.</p>
-<button class="btn-kitchen" onclick="createRation('Snack')">
+<button class="btn-kitchen" data-fn="createRation" data-args='["Snack"]'>
 <div><div style="font-weight:bold; color:#fff;">SNACK</div><div style="font-size:9px; color:#889;">+16 Stam, +2 Waste</div></div>
 <div style="text-align:right; font-size:9px; color:#889;">Cost: 30 Food, 10 Water, 1 Energy</div>
 </button>
-<button class="btn-kitchen" onclick="createRation('Meal')">
+<button class="btn-kitchen" data-fn="createRation" data-args='["Meal"]'>
 <div><div style="font-weight:bold; color:#fff;">MEAL</div><div style="font-size:9px; color:#889;">+20-28 Stam, +4 Waste</div></div>
 <div style="text-align:right; font-size:9px; color:#889;">Cost: 60 Food, 20 Water, 2 Energy</div>
 </button>
-<button class="btn-kitchen" onclick="createRation('Feast')">
+<button class="btn-kitchen" data-fn="createRation" data-args='["Feast"]'>
 <div><div style="font-weight:bold; color:#fff;">FEAST</div><div style="font-size:9px; color:#889;">+28-36 Stam, +6 Waste</div></div>
 <div style="text-align:right; font-size:9px; color:#889;">Cost: 90 Food, 30 Water, 3 Energy</div>
 </button>
@@ -743,7 +815,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 
 <div id="modal-hangar" class="modal draggable" style="display:none; border-color: var(--miner);">
 <div class="header" style="font-size:14px; color:white;">SHIP HANGAR & SHIPYARD</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 <div style="margin-bottom:15px;">
 <div class="header" style="background:transparent; border:none; padding:0; margin-bottom:5px; font-size:11px;">DOCKED FLEET</div>
 <div id="hangar-fleet-grid" style="display:flex; gap:10px; overflow-x:auto; padding-bottom:5px;"></div>
@@ -772,7 +844,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
     <div style="display:flex; gap:6px; align-items:center;">
       <input id="hangar-probe-repair-amount" type="number" min="1" max="1000" value="1"
         style="width:70px; background:#0a0a0a; border:1px solid #333; color:#eee; padding:4px 6px; font-size:11px; font-family:monospace;">
-      <button id="hangar-probe-repair-btn" onclick="repairProbe()"
+      <button id="hangar-probe-repair-btn" data-fn="repairProbe"
         style="background:rgba(0,255,170,0.1); border:1px solid var(--probe); color:var(--probe); padding:4px 12px; font-size:11px; cursor:pointer;">
         ▲ REPAIR HULL
       </button>
@@ -785,13 +857,13 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 
 <div id="modal-warehouse" class="modal draggable" style="display:none; width:700px; border-color: #889;">
 <div class="header" style="font-size:14px; color:white;">GLOBAL WAREHOUSE</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#555" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#555" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 <div id="warehouse-content" class="scan-overlay" style="padding:10px;"></div>
 </div>
 
 <div id="modal-proficiency" class="modal draggable" style="display:none; border-color: var(--xp);">
 <div class="header" style="font-size:14px; color:white;">PERSONNEL RECORD</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 <div id="proficiency-content" class="scan-overlay" style="padding:10px;"></div>
 </div>
 
@@ -800,11 +872,11 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <span>GALACTIC MARKET</span>
 <span id="mkt-live-status" style="font-size:10px; color:#555; margin-right: 20px;">○ OFFLINE</span>
 </div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 
 <div style="margin-bottom:10px; border-bottom:1px solid var(--panel-border); padding-bottom:5px;">
-<button class="tab-btn active" id="btn-mkt-sys" onclick="switchMarketTab('sys')">SYSTEM</button>
-<button class="tab-btn" id="btn-mkt-p2p" onclick="switchMarketTab('p2p')">P2P TRADING</button>
+<button class="tab-btn active" id="btn-mkt-sys" data-fn="switchMarketTab" data-args='["sys"]'>SYSTEM</button>
+<button class="tab-btn" id="btn-mkt-p2p" data-fn="switchMarketTab" data-args='["p2p"]'>P2P TRADING</button>
 </div>
 
 <div id="mkt-sys-view">
@@ -816,7 +888,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--xp); font-weight:bold;">SCAVENGING LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Scavenging skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('scavenging')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["scavenging"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
@@ -824,7 +896,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--agri); font-weight:bold;">AGRICULTURE LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Agriculture skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('agriculture')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["agriculture"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
@@ -832,7 +904,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--copper); font-weight:bold;">METALLURGY LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Metallurgy skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('metallurgy')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["metallurgy"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
@@ -840,7 +912,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--chem); font-weight:bold;">CHEMISTRY LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Chemistry skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('chemistry')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["chemistry"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
@@ -848,7 +920,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--neon); font-weight:bold;">ENGINEERING LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Engineering skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('engineering')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["engineering"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:8px; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);">
@@ -856,7 +928,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div style="color:var(--probe); font-weight:bold;">PLANETARY EXPLORATION LICENSE</div>
 <div style="font-size:9px; color:#889;">Auth Key to unlock higher Planetary Exploration skill tiers.</div>
 </div>
-<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" onclick="buySkillLicense('planetary_exploration')">BUY (1 DATA CORE)</button>
+<button class="nav-btn" style="border-color:var(--warning); color:var(--warning);" data-fn="buySkillLicense" data-args='["planetary_exploration"]'>BUY (1 DATA CORE)</button>
 </div>
 
 <div style="border-top:1px solid rgba(68,238,119,0.2); margin-top:8px; padding-top:8px;">
@@ -873,8 +945,8 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div id="mkt-p2p-view" style="display:none;">
 <!-- P2P Sub-tabs -->
 <div style="margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px; display:flex; gap:5px;">
-<button class="tab-btn active" id="btn-p2p-sell" onclick="switchP2PTab('sell')" style="border-color:var(--neon); color:var(--neon);">📤 SELL ORDERS</button>
-<button class="tab-btn" id="btn-p2p-buy" onclick="switchP2PTab('buy')" style="border-color:#ffd700; color:#ffd700;">📥 BUY ORDERS</button>
+<button class="tab-btn active" id="btn-p2p-sell" data-fn="switchP2PTab" data-args='["sell"]' style="border-color:var(--neon); color:var(--neon);">📤 SELL ORDERS</button>
+<button class="tab-btn" id="btn-p2p-buy" data-fn="switchP2PTab" data-args='["buy"]' style="border-color:#ffd700; color:#ffd700;">📥 BUY ORDERS</button>
 </div>
 
 <!-- SELL SUB-TAB -->
@@ -888,7 +960,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 </div>
 <div class="mkt-input-group">
 <input type="number" id="p2p-price" class="mkt-input" placeholder="PRICE ($H3)" min="1">
-<button class="nav-btn" onclick="postOffer()" style="border-color:var(--neon); color:var(--neon);">POST</button>
+<button class="nav-btn" data-fn="postOffer" style="border-color:var(--neon); color:var(--neon);">POST</button>
 </div>
 <div style="font-size:9px; color:#666; margin-top:5px;">Fee: 5% of Sale Price.</div>
 </div>
@@ -913,7 +985,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <div id="p2p-battery-info" style="font-size:9px; color:#778; margin-bottom:6px; min-height:14px;"></div>
 <div class="mkt-input-group">
 <input type="number" id="p2p-battery-price" class="mkt-input" placeholder="PRICE ($H3)" min="1">
-<button class="nav-btn" onclick="postBatteryOffer()" style="border-color:var(--neon); color:var(--neon);">LIST</button>
+<button class="nav-btn" data-fn="postBatteryOffer" style="border-color:var(--neon); color:var(--neon);">LIST</button>
 </div>
 <div style="font-size:9px; color:#556; margin-top:3px;">Fee: 5%. Battery must be in Global Warehouse.</div>
 </div>
@@ -940,7 +1012,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 </div>
 <div class="mkt-input-group">
 <input type="number" id="p2p-buy-price" class="mkt-input" placeholder="TOTAL PRICE ($H3)" min="1">
-<button class="nav-btn" onclick="postBuyOrder()" style="border-color:#ffd700; color:#ffd700;">POST</button>
+<button class="nav-btn" data-fn="postBuyOrder" style="border-color:#ffd700; color:#ffd700;">POST</button>
 </div>
 <div style="font-size:9px; color:#888; margin-top:5px;">$H3 locked until filled or cancelled.</div>
 </div>
@@ -964,7 +1036,7 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 <input type="number" id="p2p-bat-buy-qty" class="mkt-input" placeholder="QTY" min="1" value="1" style="flex:1;">
 <input type="number" id="p2p-bat-buy-price" class="mkt-input" placeholder="TOTAL PRICE ($H3)" min="1" style="flex:2;">
 </div>
-<button class="nav-btn" onclick="postBatteryBuyOrder()" style="border-color:#ffd700; color:#ffd700; width:100%;">POST BUY ORDER</button>
+<button class="nav-btn" data-fn="postBatteryBuyOrder" style="border-color:#ffd700; color:#ffd700; width:100%;">POST BUY ORDER</button>
 <div style="font-size:9px; color:#888; margin-top:5px;">$H3 locked until filled or cancelled.</div>
 </div>
 <div style="border:1px solid rgba(255,215,0,0.2); padding:10px; background:rgba(255,215,0,0.03); height:110px; overflow-y:auto;">
@@ -983,11 +1055,11 @@ Cost: 30kW, 5 Stamina. Output: 2-3 Units. Time: 4h.
 
 <div id="modal-missions" class="modal draggable" style="display:none; border-color: #d400ff;">
 <div class="header" style="font-size:14px; color:white;">MISSION BOARD</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#888" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 
 <div style="margin-bottom:10px; border-bottom:1px solid var(--panel-border); padding-bottom:5px;">
-<button class="tab-btn active" id="btn-msn-ground" onclick="switchMissionTab('ground')">GROUND OPERATIONS</button>
-<button class="tab-btn" id="btn-msn-daily" onclick="switchMissionTab('daily')">DAILY MISSION</button>
+<button class="tab-btn active" id="btn-msn-ground" data-fn="switchMissionTab" data-args='["ground"]'>GROUND OPERATIONS</button>
+<button class="tab-btn" id="btn-msn-daily" data-fn="switchMissionTab" data-args='["daily"]'>DAILY MISSION</button>
 </div>
 
 <div id="msn-ground-view">
@@ -1007,7 +1079,7 @@ LOADING...
 
 <div id="modal-target" class="modal draggable" style="display:none;">
 <div class="header" id="m-t-name" style="font-size:14px;">TARGET</div>
-<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#555" onclick="closeModal(null, true)">[×]</div>
+<div style="position:absolute; top:10px; right:15px; cursor:pointer; color:#555" data-fn="closeModal" data-args='[null, true]'>[×]</div>
 <div style="display:flex; justify-content:space-between; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
 <div><div style="font-size:10px; color:#889;">DIST (FROM BASE)</div><div id="m-t-dist" style="color:white;">0 AU</div></div>
 <div><div style="font-size:10px; color:#889;">EST. TIME</div><div id="m-t-time" style="color:var(--neon);">00:00</div></div>
@@ -1017,13 +1089,16 @@ LOADING...
 </div>
 </div>
 
-<script>
+<script nonce="{{CSP_NONCE}}">
 // --- NETWORK CONFIG ---
 // ВАЖНО: замените URL ниже на адрес вашего Hugging Face Space.
 // Формат: https://ВАШ-USERNAME-ВАШ-SPACE-NAME.hf.space/api
 // Пример: https://johndoe-exodus-prime-server.hf.space/api
 // Адрес Space можно найти на странице Space → кнопка "App" → скопировать URL из адресной строки.
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
+// --- ВЕРСИЯ КЛИЕНТА ---
+// !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
+const CLIENT_VERSION = 'v0.2b';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -1291,6 +1366,7 @@ log("SYS: NEW USER INITIALIZED.");
 await syncWithServerTime();
 restoreUIAfterLoad();
 startGameLoop();
+startVersionCheck();
 } catch(e) {
 hideServerStatus();
 showAuthError(e.message);
@@ -1330,6 +1406,7 @@ log("SYS: IDENTITY ESTABLISHED.");
 await syncWithServerTime();
 restoreUIAfterLoad();
 startGameLoop();
+startVersionCheck();
 } catch(e) {
 hideServerStatus();
 showAuthError(e.message);
@@ -1343,10 +1420,24 @@ el.classList.add('glitch-anim');
 setTimeout(() => el.classList.remove('glitch-anim'), 300);
 }
 
-function logout() {
-if (socket) socket.disconnect(); // --- Добавлено для WebSocket ---
-localStorage.removeItem('exodus_token');
-location.reload();
+async function logout() {
+    // --- ИСПРАВЛЕНИЕ: JWT инвалидация при logout ---
+    // Уведомляем сервер — тот инкрементирует tokenVersion, делая
+    // все активные токены невалидными. Это защищает от stolen-token атак:
+    // даже если токен утёк, после logout он перестаёт работать.
+    if (AUTH_TOKEN) {
+        try {
+            await fetch(`${API_URL}/auth/logout`, {
+                method: 'POST',
+                headers: { 'x-auth-token': AUTH_TOKEN }
+            });
+        } catch (e) {
+            // Ignore network errors — локальный logout всё равно выполняется
+        }
+    }
+    if (socket) socket.disconnect();
+    localStorage.removeItem('exodus_token');
+    location.reload();
 }
 
 // --- SERVER STATUS INDICATOR (ПРИОРИТЕТ 2) ---
@@ -2259,7 +2350,7 @@ let el = now() - s.startTime; p = Math.min(100, (el / s.duration) * 100);
 let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`;
 }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>ROASTING...</button>` : `<button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:#cc0000; color:#cc0000;"
-onclick="startRoasting(${s.id})">START ROAST</button>`;
+data-fn="startRoasting" data-args='[${s.id}]'>START ROAST</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>UNIT ${s.id+1}</span><span id="roast-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="roast-bar-${s.id}" style="height:100%; background:#cc0000; width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2272,7 +2363,7 @@ let el = now() - s.startTime; p = Math.min(100, (el / s.duration) * 100);
 let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`;
 }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>GRINDING...</button>` : `<button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:#8B4513; color:#8B4513;"
-onclick="startGrinding(${s.id})">START GRIND</button>`;
+data-fn="startGrinding" data-args='[${s.id}]'>START GRIND</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>UNIT ${s.id+1}</span><span id="grind-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="grind-bar-${s.id}" style="height:100%; background:#8B4513; width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2285,7 +2376,7 @@ let el = now() - s.startTime; p = Math.min(100, (el / s.duration) * 100);
 let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`;
 }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--neon); color:var(--neon);"
-disabled>BREWING...</button>` : `<button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--neon); color:var(--neon);" onclick="startBrewing(${s.id})">START BREW</button>`;
+disabled>BREWING...</button>` : `<button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--neon); color:var(--neon);" data-fn="startBrewing" data-args='[${s.id}]'>START BREW</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>BREWER ${s.id+1}</span><span id="brew-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="brew-bar-${s.id}" style="height:100%; background:var(--neon); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2337,12 +2428,12 @@ s.status='empty'; s.crop=null; renderGreenhouse(); updateUI(); actionSave();
 function renderGreenhouse() {
 const g = document.getElementById('greenhouse-grid'); if (!g) return;
 g.innerHTML = STATE.greenhouse.slots.map(s => {
-if(s.status==='empty') return `<div class="gh-slot empty" onclick="openCropSelect(${s.id})"><div style="font-size:30px; color:#444;">+</div></div>`;
+if(s.status==='empty') return `<div class="gh-slot empty" data-fn="openCropSelect" data-args='[${s.id}]'><div style="font-size:30px; color:#444;">+</div></div>`;
 const isReady = s.status === 'ready';
 let icon = '🌱'; if(isReady) { if(s.crop==='Sprouts')icon='🥦'; else if(s.crop==='Amaranth')icon='🌾'; else if(s.crop==='Guarana')icon='🔴'; else if(s.crop==='Potato')icon='🥔'; else if(s.crop==='Maize')icon='🌽'; }
 let timerHtml = ''; if (!isReady) { let el = now() - s.startTime; let rem = Math.max(0, s.duration - el);
 let tStr = `${Math.floor(rem/3600000)}h ${Math.floor((rem%3600000)/60000)}m`; timerHtml = `<div id="gh-time-${s.id}" style="font-size:9px; color:#889; margin-top:2px;">${tStr}</div>`; }
-return `<div class="gh-slot ${s.status}" ${isReady ? `onclick="harvestCrop(${s.id})"` : ''}><div class="gh-icon">${icon}</div><div style="font-size:10px; color:${isReady?'var(--agri)':'#aaa'}">${s.crop}</div>${timerHtml}<div class="gh-progress-bg" style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="gh-prog-${s.id}" style="height:100%; background:var(--agri); width:${isReady ? '100%' : '0%'}"></div></div>${isReady?'<div style="font-size:9px; color:var(--agri);">HARVEST</div>':''}</div>`;
+return `<div class="gh-slot ${s.status}" ${isReady ? `data-fn="harvestCrop" data-args='[${s.id}]'` : ''}><div class="gh-icon">${icon}</div><div style="font-size:10px; color:${isReady?'var(--agri)':'#aaa'}">${s.crop}</div>${timerHtml}<div class="gh-progress-bg" style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="gh-prog-${s.id}" style="height:100%; background:var(--agri); width:${isReady ? '100%' : '0%'}"></div></div>${isReady?'<div style="font-size:9px; color:var(--agri);">HARVEST</div>':''}</div>`;
 }).join('');
 const skillVal = document.getElementById('gh-skill-val'); if(skillVal) skillVal.innerText = STATE.skills.agriculture.lvl;
 const soilVal = document.getElementById('gh-soil-val'); if(soilVal) soilVal.innerText = STATE.inventory.Soil;
@@ -2388,7 +2479,7 @@ if(s.active) { let el = now() - s.startTime; p = Math.min(100, (el / s.duration)
 let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btnClass = s.active ? "ref-btn btn-filtering" : "ref-btn";
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>UNIT ${s.id+1}</span><span id="cp-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="cp-bar-${s.id}" style="height:100%; background:var(--agri); width:${p}%"></div></div><button class="${btnClass}" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--agri); color:var(--agri);"
-onclick="startCompost(${s.id})" ${s.active?'disabled':''}>${s.active?'ACTIVE':'START CYCLE'}</button></div>`;
+data-fn="startCompost" data-args='[${s.id}]' ${s.active?'disabled':''}>${s.active?'ACTIVE':'START CYCLE'}</button></div>`;
 }).join('');
 }
 
@@ -2424,8 +2515,8 @@ c.innerHTML = STATE.refinery.sabatierSlots.map(s => {
 let t = "IDLE", p = 0;
 if(s.active) { let el = now() - s.startTime; p = Math.min(100, (el / s.duration) * 100);
 let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
-let controls = !s.active ? `<div style="display:flex; gap:2px; margin-top:5px;"><button class="ref-btn" style="flex:1; font-size:8px; border-color:var(--miner);" onclick="startSabatier(${s.id}, 'split')">SPLIT WATER</button><button class="ref-btn" style="flex:1; font-size:8px; border-color:var(--warning);"
-onclick="startSabatier(${s.id}, 'methane')">METHANE</button></div>` : `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>${(s.mode||'').toUpperCase()}...</button>`;
+let controls = !s.active ? `<div style="display:flex; gap:2px; margin-top:5px;"><button class="ref-btn" style="flex:1; font-size:8px; border-color:var(--miner);" data-fn="startSabatier" data-args='[${s.id}, "split"]'>SPLIT WATER</button><button class="ref-btn" style="flex:1; font-size:8px; border-color:var(--warning);"
+data-fn="startSabatier" data-args='[${s.id}, "methane"]'>METHANE</button></div>` : `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>${(s.mode||'').toUpperCase()}...</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>CORE ${s.id+1}</span><span id="sab-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="sab-bar-${s.id}" style="height:100%; background:var(--warning); width:${p}%"></div></div>${controls}</div>`;
 }).join('');
 }
@@ -2464,7 +2555,7 @@ let t = "IDLE", p = 0; if (s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btnClass = s.active ? "ref-btn btn-filtering" : "ref-btn";
 return `<div style="background:rgba(255,255,255,0.02); padding:10px; border:1px solid rgba(255,255,255,0.1);"><div style="color:var(--neon); font-weight:bold;">C.A.D. CELL ${s.id+1}</div><div style="font-size:10px; color:#889; margin:5px 0;">Cost: 25kW <span style="color:var(--stamina)">[-5 Stam]</span></div><div style="font-size:9px; color:#666; margin-bottom:5px;">Cycle: 12h.
-Output: CO₂, N₂, Ar, Ne...</div><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa; margin-top:2px;"><span>STATUS</span><span id="cad-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:2px;"><div id="cad-bar-${s.id}" style="height:100%; background:var(--neon); width:${p}%; box-shadow: 0 0 5px var(--neon); transition: width 0.5s;"></div></div><button class="${btnClass}" id="cad-btn-${s.id}" style="width:100%" onclick="startCad(${s.id})" ${s.active?'disabled':''}>${s.active?'EXTRACTION...':'START EXTRACTION (12h)'}</button></div>`;
+Output: CO₂, N₂, Ar, Ne...</div><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa; margin-top:2px;"><span>STATUS</span><span id="cad-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:2px;"><div id="cad-bar-${s.id}" style="height:100%; background:var(--neon); width:${p}%; box-shadow: 0 0 5px var(--neon); transition: width 0.5s;"></div></div><button class="${btnClass}" id="cad-btn-${s.id}" style="width:100%" data-fn="startCad" data-args='[${s.id}]' ${s.active?'disabled':''}>${s.active?'EXTRACTION...':'START EXTRACTION (12h)'}</button></div>`;
 }).join('');
 }
 
@@ -2532,13 +2623,13 @@ let html = STATE.refinery.waterSlots.map(s => {
 let t="IDLE", p=0; if(s.active) { let el=now()-s.startTime; p=Math.min(100,(el/s.duration)*100); let r=Math.max(0,s.duration-el); t=`${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m ${Math.floor((r%60000)/1000)}s`; }
 let btnClass = s.active ? "ref-btn btn-filtering" : "ref-btn";
 return `<div class="wf-slot"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>CELL ${s.id+1}</span><span id="wf-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div class="wf-progress-bg" style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="wf-bar-${s.id}" style="height:100%; background:var(--neon); width:${p}%"></div></div><button id="wf-btn-${s.id}" class="${btnClass}" style="width:100%; margin-top:5px; font-size:9px;"
-onclick="startWaterFilter(${s.id})" ${s.active?'disabled':''}>${s.active?'FILTERING...':'START'}</button></div>`;
+data-fn="startWaterFilter" data-args='[${s.id}]' ${s.active?'disabled':''}>${s.active?'FILTERING...':'START'}</button></div>`;
 }).join('');
 const f = STATE.refinery.fermenterSlot; let fTime = "IDLE"; let fProg = 0;
 if(f.active) { let el = now() - f.startTime; fProg = Math.min(100, (el / f.duration) * 100);
 let r = Math.max(0, f.duration - el); fTime = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let fControls = f.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px; border-color:#d400ff; color:#d400ff;"
-disabled>FERMENTING ${(f.mode||'').toUpperCase()}...</button>` : `<div style="display:flex; gap:2px; margin-top:5px;"><button class="ref-btn" style="flex:1; font-size:9px; border-color:#d400ff; color:#d400ff;" onclick="startFermentation('amaranth')">AMARANTH</button><button class="ref-btn" style="flex:1; font-size:9px; border-color:#cc0000; color:#cc0000;" onclick="startFermentation('guarana')">GUARANA</button></div>`;
+disabled>FERMENTING ${(f.mode||'').toUpperCase()}...</button>` : `<div style="display:flex; gap:2px; margin-top:5px;"><button class="ref-btn" style="flex:1; font-size:9px; border-color:#d400ff; color:#d400ff;" data-fn="startFermentation" data-args='["amaranth"]'>AMARANTH</button><button class="ref-btn" style="flex:1; font-size:9px; border-color:#cc0000; color:#cc0000;" data-fn="startFermentation" data-args='["guarana"]'>GUARANA</button></div>`;
 html += `<div class="wf-slot" style="border-color: #8844cc; margin-top:10px;"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span style="color:#d400ff">FERMENTER</span><span id="ferment-time" style="color:${f.active?'var(--neon)':'#555'}">${fTime}</span></div><div style="font-size:9px; color:#889; margin:5px 0;"><div style="margin-bottom:2px;"><b style="color:#d400ff">Amaranth:</b> 20 Raw &rarr;
 13-18 Ferm. (10kW, 2 Stam, 12h)</div><div><b style="color:#cc0000">Guarana:</b> 25 Raw &rarr; 15-20 Ferm.
 (18kW, 1 Stam, 12h)</div></div><div class="wf-progress-bg" style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="ferment-bar" style="height:100%; background:#d400ff; width:${fProg}%"></div></div>${fControls}</div>`;
@@ -2602,9 +2693,9 @@ c.innerHTML = STATE.refinery.smelterSlots.map(s => {
 let t = "IDLE", p = 0; if(s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let controls = !s.active ? `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:8px; border-color:var(--mars);"
-onclick="startSmelter(${s.id}, 'iron')">SMELT IRON</button><button class="ref-btn" style="font-size:8px; border-color:#ccc; color:#ccc;" onclick="startSmelter(${s.id}, 'aluminium')">SMELT AL</button><button class="ref-btn" style="font-size:8px; border-color:var(--copper); color:var(--copper);"
-onclick="startSmelter(${s.id}, 'copper')">SMELT CU</button><button class="ref-btn" style="font-size:8px; border-color:var(--titanium); color:var(--titanium);" onclick="startSmelter(${s.id}, 'titanium')">SMELT TI</button><button class="ref-btn" style="font-size:8px; border-color:#0099ff; color:#0099ff;" onclick="startSmelter(${s.id}, 'silicon')">SMELT SILICON</button><button class="ref-btn" style="font-size:8px; border-color:var(--miner);"
-onclick="startSmelter(${s.id}, 'steel')">FORGE STEEL</button></div>` : `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--mars); color:var(--mars);" disabled>${s.mode === 'steel' ? 'FORGING...' : 'MELTING...'}</button>`;
+data-fn="startSmelter" data-args='[${s.id}, "iron"]'>SMELT IRON</button><button class="ref-btn" style="font-size:8px; border-color:#ccc; color:#ccc;" data-fn="startSmelter" data-args='[${s.id}, "aluminium"]'>SMELT AL</button><button class="ref-btn" style="font-size:8px; border-color:var(--copper); color:var(--copper);"
+data-fn="startSmelter" data-args='[${s.id}, "copper"]'>SMELT CU</button><button class="ref-btn" style="font-size:8px; border-color:var(--titanium); color:var(--titanium);" data-fn="startSmelter" data-args='[${s.id}, "titanium"]'>SMELT TI</button><button class="ref-btn" style="font-size:8px; border-color:#0099ff; color:#0099ff;" data-fn="startSmelter" data-args='[${s.id}, "silicon"]'>SMELT SILICON</button><button class="ref-btn" style="font-size:8px; border-color:var(--miner);"
+data-fn="startSmelter" data-args='[${s.id}, "steel"]'>FORGE STEEL</button></div>` : `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--mars); color:var(--mars);" disabled>${s.mode === 'steel' ? 'FORGING...' : 'MELTING...'}</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>CRUCIBLE ${s.id+1}</span><span id="sm-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="sm-bar-${s.id}" style="height:100%; background:var(--mars); width:${p}%"></div></div>${controls}</div>`;
 }).join('');
 }
@@ -2640,8 +2731,8 @@ c.innerHTML = STATE.metalworks.slots.map(s => {
 let t = "IDLE", p = 0; if (s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;"
-disabled>PROCESSING...</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:9px; border-color:#e0e0e0; color:#e0e0e0;" onclick="startMetalworks(${s.id}, 'alum_plate')">ALUM PLATE</button><button class="ref-btn" style="font-size:9px; border-color:var(--titanium); color:var(--titanium);"
-onclick="startMetalworks(${s.id}, 'titanium_plate')">TITAN PLATE</button></div>`;
+disabled>PROCESSING...</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:9px; border-color:#e0e0e0; color:#e0e0e0;" data-fn="startMetalworks" data-args='[${s.id}, "alum_plate"]'>ALUM PLATE</button><button class="ref-btn" style="font-size:9px; border-color:var(--titanium); color:var(--titanium);"
+data-fn="startMetalworks" data-args='[${s.id}, "titanium_plate"]'>TITAN PLATE</button></div>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1); margin-bottom:5px;"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>SLOT ${s.id+1}</span><span id="mw-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="mw-bar-${s.id}" style="height:100%; background:var(--white); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2680,7 +2771,7 @@ let t = "IDLE", p = 0; if (s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>${s.mode === 'moving_parts' ?
 'MOVING...' : 'MACHINING...'}</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:8px; border-color:#e0e0e0; color:#e0e0e0;"
-onclick="startMachineParts(${s.id}, 'machined_parts')">MACHINED (5Al, 5St)</button><button class="ref-btn" style="font-size:8px; border-color:#fff; color:#fff;" onclick="startMachineParts(${s.id}, 'moving_parts')">MOVING (3Al, 3Ti)</button></div>`;
+data-fn="startMachineParts" data-args='[${s.id}, "machined_parts"]'>MACHINED (5Al, 5St)</button><button class="ref-btn" style="font-size:8px; border-color:#fff; color:#fff;" data-fn="startMachineParts" data-args='[${s.id}, "moving_parts"]'>MOVING (3Al, 3Ti)</button></div>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1); margin-bottom:5px;"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>SLOT ${s.id+1}</span><span id="mp-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="mp-bar-${s.id}" style="height:100%; background:var(--white); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2722,8 +2813,8 @@ c.innerHTML = STATE.printer.slots.map(s => {
 let t = "IDLE", p = 0; if (s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;" disabled>PRINTING...</button>` : `<button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--neon); color:var(--neon);"
-onclick="startPrinter(${s.id}, 'structural_part')">PRINT STRUCTURAL (10St, 3Ti, 5Al)</button><button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--white); color:var(--white);"
-onclick="startPrinter(${s.id}, 'pvc_pipe')">PRINT PIPE (2PVC, 1ElecSi)</button><button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--copper); color:var(--copper);" onclick="startPrinter(${s.id}, 'electronic_parts')">PRINT ELECTRONICS (8Cu, 2PVC, 1ESi, 500Reg)</button>`;
+data-fn="startPrinter" data-args='[${s.id}, "structural_part"]'>PRINT STRUCTURAL (10St, 3Ti, 5Al)</button><button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--white); color:var(--white);"
+data-fn="startPrinter" data-args='[${s.id}, "pvc_pipe"]'>PRINT PIPE (2PVC, 1ElecSi)</button><button class="ref-btn" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--copper); color:var(--copper);" data-fn="startPrinter" data-args='[${s.id}, "electronic_parts"]'>PRINT ELECTRONICS (8Cu, 2PVC, 1ESi, 500Reg)</button>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>PRINTER BED ${s.id+1}</span><span id="pr-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="pr-bar-${s.id}" style="height:100%; background:var(--neon); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2770,8 +2861,8 @@ let t = "IDLE", p = 0; if(s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px; border-color:var(--fuel); color:var(--fuel);" disabled>${s.mode === 'synthesis' ?
 'SYNTHESIS' : 'LIQUEFYING ' + (s.mode||'').toUpperCase()}...</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:8px; border-color:var(--fuel); color:var(--fuel);"
-onclick="startFuelProcess(${s.id}, 'methane')">LIQ CH4</button><button class="ref-btn" style="font-size:8px; border-color:var(--neon); color:var(--neon);" onclick="startFuelProcess(${s.id}, 'oxygen')">LIQ O2</button><button class="ref-btn" style="grid-column: span 2; font-size:9px; border-color:var(--white); color:var(--white); background: rgba(255,255,255,0.1);"
-onclick="startFuelProcess(${s.id}, 'synthesis')">SYNTHESIS (FUEL)</button></div>`;
+data-fn="startFuelProcess" data-args='[${s.id}, "methane"]'>LIQ CH4</button><button class="ref-btn" style="font-size:8px; border-color:var(--neon); color:var(--neon);" data-fn="startFuelProcess" data-args='[${s.id}, "oxygen"]'>LIQ O2</button><button class="ref-btn" style="grid-column: span 2; font-size:9px; border-color:var(--white); color:var(--white); background: rgba(255,255,255,0.1);"
+data-fn="startFuelProcess" data-args='[${s.id}, "synthesis"]'>SYNTHESIS (FUEL)</button></div>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>SLOT ${s.id+1}</span><span id="fuel-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="fuel-bar-${s.id}" style="height:100%; background:var(--fuel); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -2816,7 +2907,7 @@ xp = 10;
 if (!AUTH_TOKEN) { log('CHEM ERR: Not authenticated. Power Cell not saved.'); return; }
 fetch(`${API_URL}/game/chem/create-battery`, {
 method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
-body: JSON.stringify({ qty: amount })
+body: JSON.stringify({ qty: amount, slotId: s.id })
 }).then(function(r) { return r.json(); }).then(function(data) {
 if (data.batteries) { STATE.power.batteries = data.batteries; }
 log(`CHEM: ${amount} Power Cell(s) placed in Stored Power Cells (Warehouse).`);
@@ -2836,9 +2927,9 @@ c.innerHTML = STATE.chemlab.slots.map(s => {
 let t = "IDLE", p = 0; if(s.active) { let el = now() - s.startTime;
 p = Math.min(100, (el / s.duration) * 100); let r = Math.max(0, s.duration - el); t = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; }
 let btn = s.active ? `<button class="ref-btn btn-filtering" style="width:100%; margin-top:5px; font-size:9px;"
-disabled>SYNTHESIZING ${(s.mode||'').toUpperCase()}...</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);" onclick="startChem(${s.id}, 'pvc')">PVC</button><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);"
-onclick="startChem(${s.id}, 'perchlorate')">PERCHLORATE</button><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);" onclick="startChem(${s.id}, 'pla')">PLA PLASTIC</button><button class="ref-btn" style="font-size:8px; border-color:#888; color:#888;"
-onclick="startChem(${s.id}, 'empty_battery')">BATTERY CASE</button><button class="ref-btn" style="grid-column:span 2; font-size:8px; border-color:var(--neon); color:var(--neon);" onclick="startChem(${s.id}, 'electric_silicon')">ELECTRIC SILICON</button></div>`;
+disabled>SYNTHESIZING ${(s.mode||'').toUpperCase()}...</button>` : `<div style="display:grid; grid-template-columns: 1fr 1fr; gap:2px; margin-top:5px;"><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);" data-fn="startChem" data-args='[${s.id}, "pvc"]'>PVC</button><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);"
+data-fn="startChem" data-args='[${s.id}, "perchlorate"]'>PERCHLORATE</button><button class="ref-btn" style="font-size:8px; border-color:var(--white); color:var(--white);" data-fn="startChem" data-args='[${s.id}, "pla"]'>PLA PLASTIC</button><button class="ref-btn" style="font-size:8px; border-color:#888; color:#888;"
+data-fn="startChem" data-args='[${s.id}, "empty_battery"]'>BATTERY CASE</button><button class="ref-btn" style="grid-column:span 2; font-size:8px; border-color:var(--neon); color:var(--neon);" data-fn="startChem" data-args='[${s.id}, "electric_silicon"]'>ELECTRIC SILICON</button></div>`;
 return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px solid rgba(255,255,255,0.1);"><div style="display:flex; justify-content:space-between; font-size:9px; color:#aaa;"><span>CHAMBER ${s.id+1}</span><span id="chem-time-${s.id}" style="color:${s.active?'var(--neon)':'#555'}">${t}</span></div><div style="width:100%; height:4px; background:#111; margin-top:5px;"><div id="chem-bar-${s.id}" style="height:100%; background:var(--chem); width:${p}%"></div></div>${btn}</div>`;
 }).join('');
 }
@@ -3127,7 +3218,7 @@ const wp = b.wear || 0;
 const ep = Math.max(0, 100 - cp - wp);
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
 const wCol = wp >= 60 ? '#FF3333' : wp >= 30 ? '#FF9900' : '#FF5555';
-htmlBuffer.push(`<div class="wh-item" style="border-color:${bCol}; background:rgba(255,255,255,0.02); cursor:default;"><div class="wh-cat" style="color:${bCol}">PWR</div><div class="wh-name" style="color:${bCol}">BAT-${b.id}</div><div class="wh-qty" style="font-size:11px; color:${bCol}; text-shadow:0 0 5px ${bCol}88;">${Math.floor(cp)}%</div><div style="display:flex; justify-content:space-between; font-size:9px; color:#888; margin-top:3px;"><span>WEAR</span><span style="color:${wCol}; font-weight:bold;">${wp.toFixed(1)}%</span></div><div style="width:100%; height:3px; background:#111; display:flex; margin-bottom:4px;"><div style="height:100%; width:${cp}%; background:${bCol};"></div><div style="height:100%; width:${ep}%;"></div><div style="height:100%; width:${wp}%; background:repeating-linear-gradient(45deg,#300,#300 2px,#500 2px,#500 4px);"></div></div><div style="display:flex; gap:3px; margin-top:2px;"><button class="bat-action-btn" style="border-color:var(--agri); color:var(--agri); flex:1;" onclick="retrieveBattery('${b.id}')">RETRIEVE</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger); flex:1;" onclick="destroyBattery('${b.id}')">DESTROY</button></div></div>`);
+htmlBuffer.push(`<div class="wh-item" style="border-color:${bCol}; background:rgba(255,255,255,0.02); cursor:default;"><div class="wh-cat" style="color:${bCol}">PWR</div><div class="wh-name" style="color:${bCol}">BAT-${b.id}</div><div class="wh-qty" style="font-size:11px; color:${bCol}; text-shadow:0 0 5px ${bCol}88;">${Math.floor(cp)}%</div><div style="display:flex; justify-content:space-between; font-size:9px; color:#888; margin-top:3px;"><span>WEAR</span><span style="color:${wCol}; font-weight:bold;">${wp.toFixed(1)}%</span></div><div style="width:100%; height:3px; background:#111; display:flex; margin-bottom:4px;"><div style="height:100%; width:${cp}%; background:${bCol};"></div><div style="height:100%; width:${ep}%;"></div><div style="height:100%; width:${wp}%; background:repeating-linear-gradient(45deg,#300,#300 2px,#500 2px,#500 4px);"></div></div><div style="display:flex; gap:3px; margin-top:2px;"><button class="bat-action-btn" style="border-color:var(--agri); color:var(--agri); flex:1;" data-fn="retrieveBattery" data-args='["${b.id}"]'>RETRIEVE</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger); flex:1;" data-fn="destroyBattery" data-args='["${b.id}"]'>DESTROY</button></div></div>`);
 } else { htmlBuffer.push(`<div class="wh-item" style="border:1px dashed #334; justify-content:center; color:#445;"><div style="font-size:9px;">[ EMPTY SLOT ]</div></div>`); } }
 htmlBuffer.push(`</div>`); htmlBuffer.push(`<div style="grid-column:1/-1; border-bottom:1px solid #334; margin:5px 0;"></div>`);
 let itemsBuffer = []; const add = (c,n,q,col="#9ab") => { if(isNaN(q) || q === undefined || q <= 0) return;
@@ -3230,7 +3321,7 @@ const tier = SCAV_TIERS.find(t => s.lvl >= t.min && s.lvl <= t.max); if (tier) {
 barColor = tier.color; } else if (s.lvl > 60) { tierName = "ARTISAN+"; barColor = "#FF3333";
 } name += ` <span style="color:${barColor}; font-size:9px;">[${tierName}]</span>`; if (s.locked) { const nextTier = SCAV_TIERS.find(t => t.min === s.lvl + 1);
 const reqText = nextTier ? nextTier.cert : "UNKNOWN CERTIFICATE"; barColor = "var(--danger)";
-extraInfo = `<div style="margin-top:2px; display:flex; justify-content:space-between; align-items:center;"><span style="color:var(--danger); font-size:9px;">🔒 REQ: ${reqText}</span><button class="nav-btn" style="padding:2px 6px; font-size:9px; border-color:var(--xp); color:var(--xp);" onclick="unlockSkill('${key}')">UNLOCK (1 LICENSE)</button></div>`;
+extraInfo = `<div style="margin-top:2px; display:flex; justify-content:space-between; align-items:center;"><span style="color:var(--danger); font-size:9px;">🔒 REQ: ${reqText}</span><button class="nav-btn" style="padding:2px 6px; font-size:9px; border-color:var(--xp); color:var(--xp);" data-fn="unlockSkill" data-args='["${key}"]'>UNLOCK (1 LICENSE)</button></div>`;
 } html += `<div style="margin-bottom:15px;"><div style="display:flex; justify-content:space-between; font-size:10px; color:#fff; margin-bottom:3px;"><span>${name} <span style="color:${barColor}">LVL ${s.lvl}</span></span><span style="color:#667">${Math.floor(s.xp)} / ${Math.floor(s.next)} XP</span></div><div style="width:100%; height:4px; background:#111; position:relative;"><div style="height:100%; width:${p}%; background:${barColor}; box-shadow:0 0 5px ${barColor};"></div></div>${extraInfo}</div>`;
 } html += `</div>`; c.innerHTML = html;
 }
@@ -3384,8 +3475,25 @@ STATE.uiTabs.base = t;
 saveUIState();
 }
 
-function claimDailyReward() { const currentTime = now(); if (currentTime - STATE.lastDailyClaim < DAILY_COOLDOWN) return log("ERR: Daily reward not ready.");
-STATE.lastDailyClaim = currentTime; STATE.inventory["Energy Bar"] = (STATE.inventory["Energy Bar"] || 0) + 1; log("REWARD: +1 Energy Bar acquired."); updateUI(); ServerSys.save(); }
+async function claimDailyReward() {
+const currentTime = now();
+if (currentTime - STATE.lastDailyClaim < DAILY_COOLDOWN) return log("ERR: Daily reward not ready.");
+if (!AUTH_TOKEN) return log("ERR: Not authenticated.");
+try {
+const res = await fetch(`${API_URL}/game/claim-daily`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN }
+});
+const data = await res.json();
+if (!res.ok) return log(`ERR: ${data.msg}`);
+STATE.inventory = data.inventory;
+STATE.lastDailyClaim = data.lastDailyClaim;
+log("REWARD: +1 Energy Bar acquired.");
+updateUI();
+} catch(e) {
+log(`ERR: Daily claim failed — ${e.message}`);
+}
+}
 
 function renderGroundOps() {
 const container = document.getElementById('ground-ops-content');
@@ -3431,7 +3539,7 @@ if (ih.active) {
   actionHtml = `<button class="ref-btn btn-filtering" style="width:100%; margin-top:8px; border-color:var(--neon); color:var(--neon);" disabled>HARVESTING IN PROGRESS...</button>`;
 } else {
   // Кнопка деплоя
-  actionHtml = `<button class="nav-btn" style="width:100%; margin-top:8px; border-color:var(--neon); color:var(--neon);" onclick="startIceHarvest()">▶ DEPLOY ICE HARVESTER (6h)</button>`;
+  actionHtml = `<button class="nav-btn" style="width:100%; margin-top:8px; border-color:var(--neon); color:var(--neon);" data-fn="startIceHarvest">▶ DEPLOY ICE HARVESTER (6h)</button>`;
 
   // Секция ремонта — только если прочность < 100
   if (ih.durability < 100) {
@@ -3453,7 +3561,7 @@ if (ih.active) {
       style="width:70px; background:rgba(0,0,0,0.4); border:1px solid #445; color:#fff; font-family:monospace; font-size:10px; padding:4px 6px; text-align:center;"
       ${repairCap < 1 ? 'disabled' : ''}>
     <button class="nav-btn" style="flex:1; border-color:var(--warning); color:var(--warning);"
-      onclick="repairIceHarvester()" ${repairCap < 1 ? 'disabled' : ''}>
+      data-fn="repairIceHarvester" ${repairCap < 1 ? 'disabled' : ''}>
       REPAIR
     </button>
   </div>
@@ -3536,7 +3644,7 @@ if (rh.active) {
   timerHtml = `${h}h ${m}m ${s}s`;
   actionHtml = `<button class="ref-btn btn-filtering" style="width:100%; margin-top:8px; border-color:#cc8800; color:#cc8800;" disabled>HARVESTING IN PROGRESS...</button>`;
 } else {
-  actionHtml = `<button class="nav-btn" style="width:100%; margin-top:8px; border-color:#cc8800; color:#cc8800;" onclick="startRegolithHarvest()">▶ DEPLOY REGOLITH HARVESTER (6h)</button>`;
+  actionHtml = `<button class="nav-btn" style="width:100%; margin-top:8px; border-color:#cc8800; color:#cc8800;" data-fn="startRegolithHarvest">▶ DEPLOY REGOLITH HARVESTER (6h)</button>`;
   if (rh.durability < 100) {
     const maxRepair = 100 - rh.durability;
     const availScrap = Math.floor(STATE.inventory.Scrap || 0);
@@ -3556,7 +3664,7 @@ if (rh.active) {
       style="width:70px; background:rgba(0,0,0,0.4); border:1px solid #445; color:#fff; font-family:monospace; font-size:10px; padding:4px 6px; text-align:center;"
       ${repairCap < 1 ? 'disabled' : ''}>
     <button class="nav-btn" style="flex:1; border-color:var(--warning); color:var(--warning);"
-      onclick="repairRegolithHarvester()" ${repairCap < 1 ? 'disabled' : ''}>
+      data-fn="repairRegolithHarvester" ${repairCap < 1 ? 'disabled' : ''}>
       REPAIR
     </button>
   </div>
@@ -3713,7 +3821,7 @@ function buildHarvesterBatterySlotHtml(harvesterType, harvester) {
       + '</div>'
       + '<div style="font-size:8px; color:#556; margin-bottom:6px; font-family:monospace;">ID: ' + slot.id + '</div>'
       + '<button class="nav-btn" style="width:100%; border-color:var(--warning); color:var(--warning);"'
-        + ' onclick="removeHarvesterBattery(\'' + harvesterType + '\')"'
+        + ' data-fn="removeHarvesterBattery" data-args=\'' + JSON.stringify([harvesterType]) + '\''
         + (isActive ? ' disabled title="Cannot remove while harvester is deployed"' : '') + '>'
         + (isActive ? '🔒 DEPLOYED — CANNOT REMOVE' : '⏏ REMOVE POWER CELL')
       + '</button>'
@@ -3743,7 +3851,7 @@ function buildHarvesterBatterySlotHtml(harvesterType, harvester) {
         + options
       + '</select>'
       + '<button class="nav-btn" style="border-color:' + accentColor + '; color:' + accentColor + '; white-space:nowrap; flex-shrink:0;"'
-        + ' onclick="installHarvesterBattery(\'' + harvesterType + '\')">'
+        + ' data-fn="installHarvesterBattery" data-args=\'' + JSON.stringify([harvesterType]) + '\'>'
         + '⬇ INSTALL'
       + '</button>'
     + '</div>'
@@ -3768,43 +3876,30 @@ renderGroundOps();
 updateUI(); actionSave();
 }
 
-function completeIceHarvest() {
+async function completeIceHarvest() {
 const ih = STATE.iceHarvester;
-if (!ih) return;
+if (!ih || !ih.active) return;
+// Сразу снимаем active чтобы loop не вызвал нас повторно до ответа сервера
 ih.active = false;
-const iceYield = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
-const wear = Math.floor(Math.random() * (35 - 10 + 1)) + 10;
-STATE.inventory['Ice water'] = (STATE.inventory['Ice water'] || 0) + iceYield;
-ih.durability = Math.max(0, ih.durability - wear);
-
-// Battery: consume one use, consume 8 energy, add 0.2% wear. Battery stays in slot even if depleted.
-var batMsg = '';
-if (ih.batterySlot) {
-  ih.batterySlot.usesLeft = Math.max(0, ih.batterySlot.usesLeft - 1);
-  ih.batterySlot.wear = parseFloat(Math.min(100, ih.batterySlot.wear + 0.2).toFixed(4));
-  ih.batterySlot.charge = Math.max(0, ih.batterySlot.charge - 8); // Each cycle consumes 8 energy
-  if (ih.batterySlot.usesLeft <= 0) {
-    ih.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
-    batMsg = ' | Power Cell DEPLETED (remove and replace).';
-  } else {
-    batMsg = ' | Power Cell cycles left: ' + Math.floor(ih.batterySlot.charge / 8) + ' / ' + Math.floor(33.33 / 8) + '.';
-  }
-}
-
-// Planetary Exploration XP: +25 per completed harvester cycle
-tryAddSkillXp('planetary_exploration', 25);
-var peMsg = '';
-var pe = STATE.skills.planetary_exploration;
-if (pe.locked) { peMsg = ' | SKILL: PLANETARY EXPLORATION Locked at LVL ' + pe.lvl + '. License required.'; }
-
-if (ih.durability <= 0) {
-  STATE.iceHarvester = null;
-  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + '.' + batMsg + ' +25 Planetary XP.' + peMsg + ' [UNIT DESTROYED — Durability reached zero]');
-} else {
-  log('HARVEST: Complete! +' + iceYield + ' Ice. Wear: -' + wear + ' (Durability: ' + ih.durability + '/100).' + batMsg + ' +25 Planetary XP.' + peMsg);
-}
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+try {
+const res = await fetch(`${API_URL}/game/harvester/complete`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ harvesterType: 'ice' })
+});
+const data = await res.json();
+if (!res.ok) { log('HARVEST ERR: ' + data.msg); return; }
+STATE.inventory = data.inventory;
+STATE.iceHarvester = data.harvester;
+if (data.pe) STATE.skills.planetary_exploration = data.pe;
+log(data.msg);
 renderGroundOps();
-updateUI(); actionSave();
+updateUI();
+actionSave();
+} catch(e) {
+log('HARVEST ERR: ' + e.message);
+}
 }
 
 async function repairIceHarvester() {
@@ -3849,43 +3944,30 @@ renderGroundOps();
 updateUI(); actionSave();
 }
 
-function completeRegolithHarvest() {
+async function completeRegolithHarvest() {
 const rh = STATE.regolithHarvester;
-if (!rh) return;
+if (!rh || !rh.active) return;
+// Сразу снимаем active чтобы loop не вызвал нас повторно до ответа сервера
 rh.active = false;
-const regYield = Math.floor(Math.random() * (180 - 60 + 1)) + 60;
-const wear = Math.floor(Math.random() * (35 - 15 + 1)) + 15;
-STATE.inventory['Regolith'] = (STATE.inventory['Regolith'] || 0) + regYield;
-rh.durability = Math.max(0, rh.durability - wear);
-
-// Battery: consume one use, consume 8 energy, add 0.2% wear. Battery stays in slot even if depleted.
-var batMsg = '';
-if (rh.batterySlot) {
-  rh.batterySlot.usesLeft = Math.max(0, rh.batterySlot.usesLeft - 1);
-  rh.batterySlot.wear = parseFloat(Math.min(100, rh.batterySlot.wear + 0.2).toFixed(4));
-  rh.batterySlot.charge = Math.max(0, rh.batterySlot.charge - 8); // Each cycle consumes 8 energy
-  if (rh.batterySlot.usesLeft <= 0) {
-    rh.batterySlot.charge = 0; // Depleted: charge drops to 0, stays in slot
-    batMsg = ' | Power Cell DEPLETED (remove and replace).';
-  } else {
-    batMsg = ' | Power Cell cycles left: ' + Math.floor(rh.batterySlot.charge / 8) + ' / ' + Math.floor(33.33 / 8) + '.';
-  }
-}
-
-// Planetary Exploration XP: +25 per completed harvester cycle
-tryAddSkillXp('planetary_exploration', 25);
-var peMsg = '';
-var pe = STATE.skills.planetary_exploration;
-if (pe.locked) { peMsg = ' | SKILL: PLANETARY EXPLORATION Locked at LVL ' + pe.lvl + '. License required.'; }
-
-if (rh.durability <= 0) {
-  STATE.regolithHarvester = null;
-  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + '.' + batMsg + ' +25 Planetary XP.' + peMsg + ' [UNIT DESTROYED — Durability reached zero]');
-} else {
-  log('REG-HARVEST: Complete! +' + regYield + ' Regolith. Wear: -' + wear + ' (Durability: ' + rh.durability + '/100).' + batMsg + ' +25 Planetary XP.' + peMsg);
-}
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+try {
+const res = await fetch(`${API_URL}/game/harvester/complete`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ harvesterType: 'regolith' })
+});
+const data = await res.json();
+if (!res.ok) { log('REG-HARVEST ERR: ' + data.msg); return; }
+STATE.inventory = data.inventory;
+STATE.regolithHarvester = data.harvester;
+if (data.pe) STATE.skills.planetary_exploration = data.pe;
+log(data.msg);
 renderGroundOps();
-updateUI(); actionSave();
+updateUI();
+actionSave();
+} catch(e) {
+log('REG-HARVEST ERR: ' + e.message);
+}
 }
 
 async function repairRegolithHarvester() {
@@ -4035,7 +4117,7 @@ regolithBlock = `
 </div>
 </div>
 <div style="text-align:center;">
-<button class="nav-btn" style="border-color:var(--success); color:var(--success); padding:5px 16px;" ${!canReg ? 'disabled' : ''} onclick="completeDailyMission()">COMPLETE</button>
+<button class="nav-btn" style="border-color:var(--success); color:var(--success); padding:5px 16px;" ${!canReg ? 'disabled' : ''} data-fn="completeDailyMission">COMPLETE</button>
 </div>
 </div>`;
 }
@@ -4066,7 +4148,7 @@ iceBlock = `
 </div>
 </div>
 <div style="text-align:center;">
-<button class="nav-btn" style="border-color:#0ff; color:#0ff; padding:5px 16px;" ${!canIce ? 'disabled' : ''} onclick="completeIceMission()">COMPLETE</button>
+<button class="nav-btn" style="border-color:#0ff; color:#0ff; padding:5px 16px;" ${!canIce ? 'disabled' : ''} data-fn="completeIceMission">COMPLETE</button>
 </div>
 </div>`;
 }
@@ -4084,7 +4166,22 @@ ${iceBlock}
 }
 
 function resize() { CANVAS.width = window.innerWidth; CANVAS.height = window.innerHeight; }
-function log(m) { const c=UI_CACHE['console']; if(c) c.innerHTML = `<div><span style="color:#556">[${new Date(now()).toLocaleTimeString().split(' ')[0]}]</span> ${m}</div>` + c.innerHTML; }
+function log(m) {
+    const c = UI_CACHE['console'];
+    if (!c) return;
+    // --- ИСПРАВЛЕНИЕ: log() raw HTML injection ---
+    // Прежний код делал c.innerHTML = `...[time]... ${m}` + c.innerHTML —
+    // параметр m вставлялся напрямую в innerHTML, что при любой HTML-инъекции
+    // в m давало XSS. Теперь время инжектируется через innerHTML в отдельный
+    // span, а само сообщение добавляется через textContent (безопасно).
+    const div = document.createElement('div');
+    const timeSpan = document.createElement('span');
+    timeSpan.style.color = '#556';
+    timeSpan.textContent = `[${new Date(now()).toLocaleTimeString().split(' ')[0]}]`;
+    div.appendChild(timeSpan);
+    div.appendChild(document.createTextNode(' ' + m));
+    c.insertBefore(div, c.firstChild);
+}
 
 function updateUI() {
 try {
@@ -4125,7 +4222,7 @@ hasActive = true; } if(STATE.regolithHarvester && STATE.regolithHarvester.active
 hasActive = true; } if(!hasActive) h += '<div style="padding:2px; color:#555; font-size:9px; font-style:italic;">SYSTEMS IDLE</div>'; aps.innerHTML = h; }
 const consumables = ['Snack', 'Meal', 'Feast', 'Energy Isotonic', 'Energy Bar'];
 consumables.forEach(k => { if (STATE.inventory[k] === undefined) STATE.inventory[k] = 0; }); const invEl = UI_CACHE['inventory'];
-if(invEl) { invEl.innerHTML = Object.entries(STATE.inventory).filter(([k, v]) => consumables.includes(k)).map(([k,v]) => { let act="", col="var(--kitchen)"; if (v > 0) { if (k === 'Energy Isotonic') { act=`<button class="consume-btn" style="border-color:var(--neon); color:var(--neon);" onclick="consume('${k}')">DRINK</button>`; } else { const last = STATE.cooldowns[k] || 0; const diff = now() - last; if(diff < EATING_COOLDOWN_MS) { let rem = EATING_COOLDOWN_MS - diff; let m = Math.floor(rem/60000); let s = Math.floor((rem%60000)/1000); act=`<span style="font-size:9px; color:#FF3333; font-weight:bold;">[WAIT ${m}m ${s}s]</span>`; } else { act=`<button class="consume-btn" onclick="consume('${k}')">EAT</button>`; } } } else { act=`<span style="font-size:8px; color:#555">EMPTY</span>`; } return `<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); padding:2px 4px; border-left:2px solid ${col}; margin-bottom:1px;"><div><span style="color:${col}">${k}</span></div><div style="display:flex;
+if(invEl) { invEl.innerHTML = Object.entries(STATE.inventory).filter(([k, v]) => consumables.includes(k)).map(([k,v]) => { let act="", col="var(--kitchen)"; if (v > 0) { if (k === 'Energy Isotonic') { act=`<button class="consume-btn" style="border-color:var(--neon); color:var(--neon);" data-fn="consume" data-args='["${k}"]'>DRINK</button>`; } else { const last = STATE.cooldowns[k] || 0; const diff = now() - last; if(diff < EATING_COOLDOWN_MS) { let rem = EATING_COOLDOWN_MS - diff; let m = Math.floor(rem/60000); let s = Math.floor((rem%60000)/1000); act=`<span style="font-size:9px; color:#FF3333; font-weight:bold;">[WAIT ${m}m ${s}s]</span>`; } else { act=`<button class="consume-btn" data-fn="consume" data-args='["${k}"]'>EAT</button>`; } } } else { act=`<span style="font-size:8px; color:#555">EMPTY</span>`; } return `<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.01); padding:2px 4px; border-left:2px solid ${col}; margin-bottom:1px;"><div><span style="color:${col}">${k}</span></div><div style="display:flex;
 align-items:center;"> <span style="color:#eee; margin-right:5px;">${Math.floor(v)}</span>${act}</div></div>`; }).join('') || '<div style="color:#444">EMPTY</div>'; }
 
 // ЦВЕТА БАТАРЕЙ ДЛЯ СЕТКИ (GRID)
@@ -4134,7 +4231,7 @@ if (gBats.length === 0) gh = "<div style='color:var(--danger); font-size:9px; fo
 else { gh = gBats.map(b => { 
 const cp=(b.charge/POWER_CFG.batteryCap)*100, dp=b.wear, ep=100-cp-dp; 
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
-return `<div class="battery-item active-slot" style="border-color:${bCol}; background: linear-gradient(90deg, ${bCol}22 0%, transparent 100%);"><span class="bat-id" style="color:${bCol}; text-shadow: 0 0 3px ${bCol}88;">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 5px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><span class="bat-text" style="color:#aaa;">${b.wear.toFixed(1)}% WR</span><button class="bat-action-btn eject" onclick="ejectBattery('${b.id}')">EJECT</button></div>`; 
+return `<div class="battery-item active-slot" style="border-color:${bCol}; background: linear-gradient(90deg, ${bCol}22 0%, transparent 100%);"><span class="bat-id" style="color:${bCol}; text-shadow: 0 0 3px ${bCol}88;">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 5px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><span class="bat-text" style="color:#aaa;">${b.wear.toFixed(1)}% WR</span><button class="bat-action-btn eject" data-fn="ejectBattery" data-args='["${b.id}"]'>EJECT</button></div>`; 
 }).join('');
 } for(let i=0; i < (POWER_CFG.maxGridSlots - gBats.length); i++) gh += `<div style="border:1px dashed #334; padding:4px; font-size:9px; color:#445; text-align:center; margin-bottom:4px;">[ EMPTY SLOT ]</div>`;
 if(UI_CACHE['active-grid-list']) UI_CACHE['active-grid-list'].innerHTML = gh;
@@ -4145,7 +4242,7 @@ for (let i = 0; i < 5; i++) { if (i < lBats.length) { const b = lBats[i];
 const cp = (b.charge / POWER_CFG.batteryCap) * 100; const dp = b.wear; const ep = 100 - cp - dp;
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
 bh += `<div class="battery-item" style="border-left:2px solid ${bCol};"><span class="bat-id" style="color:${bCol};">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 3px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><div style="display:flex; gap:2px;"><button class="bat-action-btn" style="border-color:var(--agri); color:var(--agri);"
-onclick="installBattery('${b.id}')">INSTALL</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger);" onclick="storeBattery('${b.id}')">STORE</button></div></div>`; } else { bh += `<div class="battery-item" style="justify-content:center; border:1px dashed #334; color:#445;">[ RACK SLOT EMPTY ]</div>`;
+data-fn="installBattery" data-args='["${b.id}"]'>INSTALL</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger);" data-fn="storeBattery" data-args='["${b.id}"]'>STORE</button></div></div>`; } else { bh += `<div class="battery-item" style="justify-content:center; border:1px dashed #334; color:#445;">[ RACK SLOT EMPTY ]</div>`;
 } } if(UI_CACHE['battery-rack']) UI_CACHE['battery-rack'].innerHTML = bh;
 
 // UPDATE HELIUM3 BALANCE DISPLAY
@@ -4222,7 +4319,7 @@ let col = b.color;
 let sig = b.scanned ? (b.res.length > 0 ? b.res.join(', ') : "Barren") : "UNKNOWN";
 let sigColor = b.scanned ? (b.res.length > 0 ? "var(--success)" : "#888") : "var(--warning)";
 let rowClass = (STATE.selectedObj && STATE.selectedObj.id === b.id) ? "background:rgba(0, 229, 255, 0.1);" : "";
-return `<tr style="${rowClass}" onclick="openModal(STATE.bodies.find(x=>x.id===${b.id}))">
+return `<tr style="${rowClass}" data-fn="openModal" data-args='[STATE.bodies.find(x=>x.id===${b.id})]'>
 <td style="color:${col}; font-weight:bold;">${b.name}</td>
 <td>${b.type.toUpperCase()}</td>
 <td>${d} AU</td>
@@ -4340,7 +4437,7 @@ html += `<div style="display:flex; justify-content:space-between; align-items:ce
 </div>
 <div style="display:flex; gap:4px; align-items:center;">
 <input type="number" id="seed-qty-${offer.seedType}" min="1" max="${maxQty}" value="1" style="width:38px; background:rgba(0,0,0,0.35); border:1px solid #334; color:#ccc; font-family:monospace; font-size:9px; padding:2px 4px; text-align:center;"${soldOut ? ' disabled' : ''}>
-<button class="nav-btn" style="padding:2px 8px; font-size:9px; border-color:${soldOut ? '#333' : 'var(--agri)'}; color:${soldOut ? '#444' : 'var(--agri)'};" onclick="buySeeds('${offer.seedType}')"${soldOut ? ' disabled' : ''}>${soldOut ? 'SOLD OUT' : 'BUY'}</button>
+<button class="nav-btn" style="padding:2px 8px; font-size:9px; border-color:${soldOut ? '#333' : 'var(--agri)'}; color:${soldOut ? '#444' : 'var(--agri)'};" data-fn="buySeeds" data-args='["${offer.seedType}"]'${soldOut ? ' disabled' : ''}>${soldOut ? 'SOLD OUT' : 'BUY'}</button>
 </div>
 </div>`;
 });
@@ -4608,16 +4705,16 @@ const isMine = o.isMine || o.seller === 'ME' || (STATE.username && o.seller === 
 const card = `
 <div class="mkt-offer-card">
 <div>
-<div style="color:${isMine ? 'var(--neon)' : '#fff'}; font-weight:bold;">${o.item} <span style="color:#889">x${o.qty}</span></div>
-<div style="font-size:9px; color:#666;">Seller: ${isMine ? 'YOU' : (o.seller || 'Unknown')}</div>
+<div style="color:${isMine ? 'var(--neon)' : '#fff'}; font-weight:bold;">${escapeHtml(o.item)} <span style="color:#889">x${o.qty}</span></div>
+<div style="font-size:9px; color:#666;">Seller: ${isMine ? 'YOU' : escapeHtml(o.seller || 'Unknown')}</div>
 </div>
 <div style="text-align:right;">
 <div style="color:var(--warning); font-weight:bold; font-size:11px;">${o.price} $H3</div>
 ${isMine
-? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelOffer('${o._id || o.id}')">CANCEL</button>`
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" data-fn="cancelOffer" data-args='["${o._id || o.id}"]'>CANCEL</button>`
 : `<div style="display:flex; gap:5px; margin-top:2px; align-items:center; justify-content:flex-end;">
 <input type="number" id="buy-qty-${o._id || o.id}" value="1" min="1" max="${o.qty}" style="width:35px; background:rgba(0,0,0,0.3); border:1px solid #334; color:#fff; font-family:monospace; font-size:9px; padding:2px; text-align:center;">
-<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:var(--success); color:var(--success);" onclick="buyP2P('${o._id || o.id}')">BUY</button>
+<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:var(--success); color:var(--success);" data-fn="buyP2P" data-args='["${o._id || o.id}"]'>BUY</button>
 </div>`
 }
 </div>
@@ -4746,17 +4843,17 @@ const pricePerUnit = remaining > 0 ? Math.round(o.price / remaining) : o.price;
 
 const card = `<div class="mkt-offer-card" style="border-color:rgba(255,215,0,0.3); background:rgba(255,215,0,0.05);">
 <div>
-<div style="color:${isMine ? '#ffd700' : '#fff'}; font-weight:bold;">${o.item} <span style="color:#889;">x${remaining}</span></div>
-<div style="font-size:9px; color:#666;">Buyer: ${isMine ? 'YOU' : (o.buyer || 'Unknown')}</div>
+<div style="color:${isMine ? '#ffd700' : '#fff'}; font-weight:bold;">${escapeHtml(o.item)} <span style="color:#889;">x${remaining}</span></div>
+<div style="font-size:9px; color:#666;">Buyer: ${isMine ? 'YOU' : escapeHtml(o.buyer || 'Unknown')}</div>
 <div style="font-size:9px; color:#555;">${pricePerUnit} $H3/ea</div>
 </div>
 <div style="text-align:right;">
 <div style="color:#ffd700; font-weight:bold; font-size:11px;">${o.price} $H3</div>
 ${isMine
-? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelBuyOrder('${o.id}')">CANCEL</button>`
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" data-fn="cancelBuyOrder" data-args='["${o.id}"]'>CANCEL</button>`
 : `<div style="display:flex; gap:4px; margin-top:2px; align-items:center; justify-content:flex-end;">
 <input type="number" id="fill-qty-${o.id}" value="1" min="1" max="${remaining}" style="width:35px; background:rgba(0,0,0,0.3); border:1px solid #554; color:#fff; font-family:monospace; font-size:9px; padding:2px; text-align:center;">
-<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:#ffd700; color:#ffd700;" onclick="fillBuyOrder('${o.id}')">FILL</button>
+<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:#ffd700; color:#ffd700;" data-fn="fillBuyOrder" data-args='["${o.id}"]'>FILL</button>
 </div>`
 }
 </div>
@@ -4788,6 +4885,11 @@ const activeBtn = document.getElementById(`comms-tab-${tab}`);
 if (activeBtn) activeBtn.classList.remove('unread');
 }
 
+function escapeHtml(str) {
+if (typeof str !== 'string') return '';
+return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
 function appendChatMessage(channel, msg) {
 const container = document.getElementById(`chat-messages-${channel}`);
 if (!container) return;
@@ -4797,7 +4899,7 @@ const chanClass = channel === 'trade' ? 'trade' : '';
 const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const div = document.createElement('div');
 div.className = `chat-msg ${chanClass}`;
-div.innerHTML = `<span style="color:#334;">[${time}]</span> <span class="cm-name ${nameClass}">${msg.username}:</span><span style="color:#bbb;">${msg.text}</span>`;
+div.innerHTML = `<span style="color:#334;">[${time}]</span> <span class="cm-name ${nameClass}">${escapeHtml(msg.username)}:</span><span style="color:#bbb;">${escapeHtml(msg.text)}</span>`;
 container.appendChild(div);
 // Auto-scroll to bottom
 container.scrollTop = container.scrollHeight;
@@ -4975,14 +5077,14 @@ const isMine = o.isMine;
 const card = `<div class="mkt-offer-card" style="border-color:rgba(0,229,255,0.3); background:rgba(0,229,255,0.04);">
 <div>
 <div style="color:${isMine ? 'var(--neon)' : '#fff'}; font-weight:bold;">⚡ FULL BATTERY</div>
-<div style="font-size:9px; color:#667;">Seller: ${isMine ? 'YOU' : (o.seller || 'Unknown')}</div>
+<div style="font-size:9px; color:#667;">Seller: ${isMine ? 'YOU' : escapeHtml(o.seller || 'Unknown')}</div>
 <div style="font-size:9px; color:#556;">Charge: ${chargePct}% | Wear: ${wearStr}%</div>
 </div>
 <div style="text-align:right;">
 <div style="color:var(--warning); font-weight:bold; font-size:11px;">${o.price} $H3</div>
 ${isMine
-? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelBatteryOffer('${o.id}')">CANCEL</button>`
-: `<button class="nav-btn" style="padding:1px 5px; font-size:9px; margin-top:2px; border-color:var(--neon); color:var(--neon);" onclick="buyBatteryOffer('${o.id}')">BUY</button>`
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" data-fn="cancelBatteryOffer" data-args='["${o.id}"]'>CANCEL</button>`
+: `<button class="nav-btn" style="padding:1px 5px; font-size:9px; margin-top:2px; border-color:var(--neon); color:var(--neon);" data-fn="buyBatteryOffer" data-args='["${o.id}"]'>BUY</button>`
 }
 </div>
 </div>`;
@@ -5101,7 +5203,7 @@ return `<option value="${b.id}">BAT-${b.id} (${cp}% | ${(b.wear||0).toFixed(2)}%
 }).join('');
 fillHtml = `<div style="display:flex; gap:4px; margin-top:3px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
 <select id="bat-fill-select-${o.id}" style="background:rgba(0,0,0,0.4); border:1px solid #554; color:#fff; font-family:monospace; font-size:8px; padding:2px; max-width:130px;">${opts}</select>
-<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:#ffd700; color:#ffd700;" onclick="fillBatteryBuyOrder('${o.id}')">FILL</button>
+<button class="nav-btn" style="padding:1px 5px; font-size:9px; border-color:#ffd700; color:#ffd700;" data-fn="fillBatteryBuyOrder" data-args='["${o.id}"]'>FILL</button>
 </div>`;
 } else {
 fillHtml = `<div style="font-size:9px; color:#554; margin-top:3px;">No eligible batteries</div>`;
@@ -5111,13 +5213,13 @@ fillHtml = `<div style="font-size:9px; color:#554; margin-top:3px;">No eligible 
 const card = `<div class="mkt-offer-card" style="border-color:rgba(255,215,0,0.3); background:rgba(255,215,0,0.04);">
 <div>
 <div style="color:${isMine ? '#ffd700' : '#fff'}; font-weight:bold;">⚡ FULL BATTERY x${remaining}</div>
-<div style="font-size:9px; color:#667;">Buyer: ${isMine ? 'YOU' : (o.buyer || 'Unknown')}</div>
+<div style="font-size:9px; color:#667;">Buyer: ${isMine ? 'YOU' : escapeHtml(o.buyer || 'Unknown')}</div>
 <div style="font-size:9px; color:#556;">${pricePerUnit} $H3/ea (wear ≤1%)</div>
 </div>
 <div style="text-align:right;">
 <div style="color:#ffd700; font-weight:bold; font-size:11px;">${o.price} $H3</div>
 ${isMine
-? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" onclick="cancelBatteryBuyOrder('${o.id}')">CANCEL</button>`
+? `<button class="nav-btn danger" style="padding:1px 5px; font-size:9px; margin-top:2px;" data-fn="cancelBatteryBuyOrder" data-args='["${o.id}"]'>CANCEL</button>`
 : fillHtml
 }
 </div>
@@ -5130,6 +5232,173 @@ else pubHTML += card;
 myDiv.innerHTML = myHTML || '<div style="color:#445; text-align:center; padding:8px; font-size:9px;">NO ACTIVE ORDERS</div>';
 pubDiv.innerHTML = pubHTML || '<div style="color:#445; text-align:center; padding:10px;">NO BATTERY BUY ORDERS FOUND</div>';
 }
+
+// --- VERSION CHECK ---
+// Сравниваем CLIENT_VERSION с GAME_VERSION на сервере.
+// Запускается один раз при входе в игру и затем каждые 5 минут.
+// При расхождении версий — показывает попап с предложением обновить страницу.
+let _versionCheckInterval = null;
+
+async function checkVersion() {
+    try {
+        const res = await fetch(`${API_URL}/version`, { cache: 'no-store' });
+        if (!res.ok) return; // сервер недоступен — не мешаем игре
+        const { version } = await res.json();
+        if (version && version !== CLIENT_VERSION) {
+            // Версии не совпадают — показываем оверлей
+            const overlay = document.getElementById('update-overlay');
+            const oldEl   = document.getElementById('upd-old-ver');
+            const newEl   = document.getElementById('upd-new-ver');
+            if (oldEl) oldEl.textContent = CLIENT_VERSION;
+            if (newEl) newEl.textContent = version;
+            if (overlay) overlay.classList.add('visible');
+            // Останавливаем интервал — попап уже показан
+            if (_versionCheckInterval) { clearInterval(_versionCheckInterval); _versionCheckInterval = null; }
+        }
+    } catch(e) {
+        // Сеть недоступна — тихо игнорируем, не мешаем игре
+    }
+}
+
+function startVersionCheck() {
+    // Первая проверка через 10 секунд после входа (даём игре загрузиться)
+    setTimeout(() => {
+        checkVersion();
+        // Затем проверяем каждые 5 минут
+        _versionCheckInterval = setInterval(checkVersion, 5 * 60 * 1000);
+    }, 10000);
+}
+
+// =============================================================================
+// --- CSP EVENT DELEGATION SYSTEM ---
+// Заменяет inline onclick= атрибуты на безопасный data-fn диспетчер.
+// Это позволяет убрать script-src-attr: 'unsafe-inline' из CSP,
+// закрывая вектор атаки через инжектированные onclick= атрибуты.
+//
+// Как работает:
+//   HTML:   <button data-fn="switchTab" data-args='["refinery"]'>
+//   JS:     document.addEventListener('click', ...) → вызывает switchTab("refinery")
+//
+// Только функции из ALLOWED_ACTIONS могут быть вызваны через data-fn.
+// =============================================================================
+(function() {
+    // Белый список разрешённых функций. Только эти функции доступны через data-fn.
+    // Прямые ссылки резолвятся при первом клике (lazy, чтобы не зависеть от порядка объявления).
+    const ALLOWED_ACTIONS = {
+        // Auth
+        'login': () => login,
+        'register': () => register,
+        'logout': () => logout,
+        'toggleAuth': () => toggleAuth,
+        'location_reload': () => () => location.reload(true),
+        // Navigation / modals
+        'openBaseModalFromUI': () => openBaseModalFromUI,
+        'openHangar': () => openHangar,
+        'openWarehouse': () => openWarehouse,
+        'openMarket': () => openMarket,
+        'openProficiency': () => openProficiency,
+        'openDailyMissions': () => openDailyMissions,
+        'closeModal': () => closeModal,
+        'closeCropSelect': () => closeCropSelect,
+        // Tabs
+        'switchTab': () => switchTab,
+        'switchMarketTab': () => switchMarketTab,
+        'switchP2PTab': () => switchP2PTab,
+        'switchCommsTab': () => switchCommsTab,
+        'switchMissionTab': () => switchMissionTab,
+        // Actions
+        'scavenge': () => scavenge,
+        'sendChatMsg': () => sendChatMsg,
+        'claimDailyReward': () => claimDailyReward,
+        'completeDailyMission': () => completeDailyMission,
+        'completeIceMission': () => completeIceMission,
+        // Kitchen
+        'createRation': () => createRation,
+        // Greenhouse
+        'plantCrop': () => plantCrop,
+        'harvestCrop': () => harvestCrop,
+        'openCropSelect': () => openCropSelect,
+        // Skills
+        'unlockSkill': () => unlockSkill,
+        'buySkillLicense': () => buySkillLicense,
+        // Hangar
+        'repairProbe': () => repairProbe,
+        // Market
+        'postOffer': () => postOffer,
+        'postBuyOrder': () => postBuyOrder,
+        'postBatteryOffer': () => postBatteryOffer,
+        'postBatteryBuyOrder': () => postBatteryBuyOrder,
+        'buyP2P': () => buyP2P,
+        'cancelOffer': () => cancelOffer,
+        'fillBuyOrder': () => fillBuyOrder,
+        'cancelBuyOrder': () => cancelBuyOrder,
+        'buyBatteryOffer': () => buyBatteryOffer,
+        'cancelBatteryOffer': () => cancelBatteryOffer,
+        'fillBatteryBuyOrder': () => fillBatteryBuyOrder,
+        'cancelBatteryBuyOrder': () => cancelBatteryBuyOrder,
+        'buySeeds': () => buySeeds,
+        // Refinery / production
+        'startWaterFilter': () => startWaterFilter,
+        'startSabatier': () => startSabatier,
+        'startFermentation': () => startFermentation,
+        'startSmelter': () => startSmelter,
+        'startMetalworks': () => startMetalworks,
+        'startMachineParts': () => startMachineParts,
+        'startPrinter': () => startPrinter,
+        'startFuelProcess': () => startFuelProcess,
+        'startChem': () => startChem,
+        'startCad': () => startCad,
+        'startCompost': () => startCompost,
+        'startRoasting': () => startRoasting,
+        'startGrinding': () => startGrinding,
+        'startBrewing': () => startBrewing,
+        'startIceHarvest': () => startIceHarvest,
+        'startRegolithHarvest': () => startRegolithHarvest,
+        'repairIceHarvester': () => repairIceHarvester,
+        'repairRegolithHarvester': () => repairRegolithHarvester,
+        'installHarvesterBattery': () => installHarvesterBattery,
+        'removeHarvesterBattery': () => removeHarvesterBattery,
+        // Battery actions
+        'ejectBattery': () => ejectBattery,
+        'installBattery': () => installBattery,
+        'storeBattery': () => storeBattery,
+        'retrieveBattery': () => retrieveBattery,
+        'destroyBattery': () => destroyBattery,
+        // Consume
+        'consume': () => consume,
+    };
+
+    document.addEventListener('click', function(e) {
+        const el = e.target.closest('[data-fn]');
+        if (!el) return;
+
+        const fnKey = el.getAttribute('data-fn');
+        if (!fnKey || !ALLOWED_ACTIONS[fnKey]) {
+            console.warn('[CSP-DELEGATE] Unknown action:', fnKey);
+            return;
+        }
+
+        // Резолвим функцию лениво (она должна быть объявлена к моменту клика)
+        const fn = ALLOWED_ACTIONS[fnKey]();
+        if (typeof fn !== 'function') {
+            console.warn('[CSP-DELEGATE] Not a function:', fnKey);
+            return;
+        }
+
+        const argsRaw = el.getAttribute('data-args');
+        let args = [];
+        if (argsRaw) {
+            try {
+                args = JSON.parse(argsRaw);
+            } catch (ex) {
+                console.warn('[CSP-DELEGATE] Bad data-args for', fnKey, argsRaw);
+                return;
+            }
+        }
+
+        fn(...args);
+    });
+})();
 
 // --- INIT ---
 window.onload = init;
