@@ -4476,6 +4476,7 @@ log(`MKT ERR: ${e.message}`);
 }
 
 
+function initMarket() {
 if(!STATE.market) STATE.market = {};
 if(!STATE.market.offers) STATE.market.offers = [];
 if(!STATE.market.buyOrders) STATE.market.buyOrders = [];
@@ -4484,6 +4485,7 @@ if(!STATE.market.batteryBuyOrders) STATE.market.batteryBuyOrders = [];
 if(!STATE.market.seedShop) STATE.market.seedShop = { offers: [], nextRefresh: 0 };
 // Load offers from server on init
 loadMarketData();
+}
 
 async function loadMarketData() {
 try {
