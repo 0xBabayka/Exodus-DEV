@@ -1098,7 +1098,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2b';
+const CLIENT_VERSION = 'v0.2c';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -1518,6 +1518,18 @@ STATE.power.consumptionRate = data.consumptionRate;
 if (typeof data.probeDurability === 'number') {
 STATE.probeDurability = data.probeDurability;
 }
+} else if (res.status === 401 || res.status === 403) {
+// Токен истёк или невалиден — показываем форму входа
+hideServerStatus();
+AUTH_TOKEN = null;
+localStorage.removeItem('exodus_token');
+if (socket) { try { socket.disconnect(); } catch(_) {} }
+const authErr = document.getElementById('auth-error');
+if (authErr) authErr.innerText = res.status === 403
+? '[ERR] SESSION INVALID: PLEASE LOGIN AGAIN'
+: '[ERR] SESSION EXPIRED: PLEASE LOGIN AGAIN';
+const overlay = document.getElementById('auth-overlay');
+if (overlay) overlay.style.display = 'flex';
 }
 } catch(e) { hideServerStatus(); console.error("Save Failed", e); }
 },
@@ -1955,6 +1967,7 @@ initSocket(); // --- Добавлено для WebSocket ---
 initMarket(); // Initialize Market Data
 restoreUIAfterLoad();
 startGameLoop();
+startVersionCheck();
 })
 .catch(() => {
 document.getElementById('auth-overlay').style.display = 'flex';
@@ -2990,7 +3003,7 @@ body: JSON.stringify({ skillKey })
 });
 const data = await res.json();
 if (!res.ok) return log(`SKILL ERR: ${data.msg || 'Unlock failed.'}`);
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.skills[skillKey] = data.skill;
 log(`SKILL: ${skillKey.replace(/_/g, ' ').toUpperCase()} unlocked! Now LVL ${data.skill.lvl}.`);
 renderProficiency(); updateUI(); actionSave();
@@ -3342,7 +3355,7 @@ body: JSON.stringify({ shipType: t, targetId: STATE.selectedObj.id, startPos, cl
 });
 const data = await res.json();
 if (!res.ok) return log(`CMD ERR: ${data.msg || 'Launch failed.'}`);
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.hangar = data.hangar;
 STATE.stamina = data.stamina;
 STATE.ships = data.ships;
@@ -3371,7 +3384,7 @@ async function repairProbe() {
         });
         const data = await res.json();
         if (!res.ok) return log(`PROBE REPAIR ERR: ${data.msg || 'Server error.'}`);
-        if (data.inventory) STATE.inventory = data.inventory;
+        if (data.inventory) Object.assign(STATE.inventory, data.inventory);
         if (typeof data.probeDurability === 'number') STATE.probeDurability = data.probeDurability;
         log(`PROBE: Hull repaired +${amount} integrity. Durability: ${STATE.probeDurability}/1000.`);
         renderHangarProbeRepair();
@@ -3410,7 +3423,7 @@ return log(`SCAN ERR: ${data.msg || 'Server error.'}`);
 }
 STATE.ships = data.ships;
 STATE.bodies = data.bodies;
-if (data.inventory) STATE.inventory = data.inventory;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.planetary_exploration) STATE.skills.planetary_exploration = data.planetary_exploration;
 let scanMsg = `DATA: ${target.name} scanned. Data acquired. Returning.`;
 if (data.brokenDataDrop > 0) { scanMsg += ` [+${data.brokenDataDrop} Broken Data]`; }
@@ -3486,7 +3499,7 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN }
 });
 const data = await res.json();
 if (!res.ok) return log(`ERR: ${data.msg}`);
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.lastDailyClaim = data.lastDailyClaim;
 log("REWARD: +1 Energy Bar acquired.");
 updateUI();
@@ -3890,7 +3903,7 @@ body: JSON.stringify({ harvesterType: 'ice' })
 });
 const data = await res.json();
 if (!res.ok) { log('HARVEST ERR: ' + data.msg); return; }
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.iceHarvester = data.harvester;
 if (data.pe) STATE.skills.planetary_exploration = data.pe;
 log(data.msg);
@@ -3918,7 +3931,7 @@ body: JSON.stringify({ harvesterType: 'ice', amount })
 });
 const data = await res.json();
 if (!res.ok) return log('HARVEST: ' + data.msg);
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.iceHarvester = data.harvester;
 log('HARVEST: ' + data.msg);
 renderGroundOps();
@@ -3958,7 +3971,7 @@ body: JSON.stringify({ harvesterType: 'regolith' })
 });
 const data = await res.json();
 if (!res.ok) { log('REG-HARVEST ERR: ' + data.msg); return; }
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.regolithHarvester = data.harvester;
 if (data.pe) STATE.skills.planetary_exploration = data.pe;
 log(data.msg);
@@ -3986,7 +3999,7 @@ body: JSON.stringify({ harvesterType: 'regolith', amount })
 });
 const data = await res.json();
 if (!res.ok) return log('REG-HARVEST: ' + data.msg);
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.regolithHarvester = data.harvester;
 log('REG-HARVEST: ' + data.msg);
 renderGroundOps();
@@ -4051,7 +4064,7 @@ const data = await res.json();
 if(!res.ok) return log(`MISSION ERR: ${data.msg}`);
 
 STATE.dailyMission = data.dailyMission;
-if (data.inventory) STATE.inventory = data.inventory;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 log(`MISSION COMPLETE: Delivered ${data.dailyMission.regolithReq} Reg, received ${data.reward} $H3.`);
 renderDailyMission();
 updateUI();
@@ -4070,7 +4083,7 @@ const data = await res.json();
 if(!res.ok) return log(`MISSION ERR: ${data.msg}`);
 
 STATE.dailyMission = data.dailyMission;
-if (data.inventory) STATE.inventory = data.inventory;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 log(`MISSION COMPLETE: Delivered ${data.dailyMission.iceReq} Ice, received ${data.reward} $H3.`);
 renderDailyMission();
 updateUI();
@@ -4354,7 +4367,7 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN }
 });
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "TRANSACTION FAILED");
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 log(`MARKET: ${SKILL_LICENSE_MAP[skillKey]} acquired.`);
 renderWarehouse();
 updateUI();
@@ -4463,7 +4476,7 @@ body: JSON.stringify({ seedType, qty })
 });
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "PURCHASE FAILED");
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.seedShop = { offers: data.offers, nextRefresh: data.nextRefresh };
 log(`MKT: Purchased ${qty}x Seeds: ${seedType} for ${totalCost} $H3.`);
 renderSeedShop(STATE.market.seedShop);
@@ -4639,7 +4652,7 @@ if(!res.ok) throw new Error(data.msg || "CANCEL FAILED");
 
 STATE.market.offers = data.offers || []; // Update list
 
-if(data.inventory) STATE.inventory = data.inventory;
+if(data.inventory) Object.assign(STATE.inventory, data.inventory);
 
 log("MKT: Offer cancelled. Items returned.");
 renderP2PMarket();
@@ -4670,7 +4683,7 @@ body: JSON.stringify({ offerId, buyQty })
 const data = await res.json();
 if(!res.ok) throw new Error(data.msg || "BUY FAILED");
 
-STATE.inventory = data.inventory; // Sync inventory (Money deducted, Item added)
+Object.assign(STATE.inventory, data.inventory); // Sync inventory (Money deducted, Item added)
 // Refresh offers list to remove the bought item
 loadMarketData();
 
@@ -4769,7 +4782,7 @@ body: JSON.stringify({ item, qty, price })
 const data = await res.json();
 if(!res.ok) throw new Error(data.msg || "POST FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.buyOrders = data.buyOrders || [];
 log(`MKT: Buy order posted for ${qty}x ${item} @ ${price} $H3.`);
 renderBuyOrdersTab();
@@ -4792,7 +4805,7 @@ body: JSON.stringify({ orderId })
 const data = await res.json();
 if(!res.ok) throw new Error(data.msg || "CANCEL FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.buyOrders = data.buyOrders || [];
 log("MKT: Buy order cancelled. $H3 refunded.");
 renderBuyOrdersTab();
@@ -4817,7 +4830,7 @@ body: JSON.stringify({ orderId, fillQty })
 const data = await res.json();
 if(!res.ok) throw new Error(data.msg || "FILL FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.buyOrders = data.buyOrders || [];
 log(`MKT: Filled ${fillQty} items. $H3 received.`);
 renderBuyOrdersTab();
@@ -5051,7 +5064,7 @@ body: JSON.stringify({ offerId })
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "BUY FAILED");
 
-if (data.inventory) STATE.inventory = data.inventory;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.batteries) STATE.power.batteries = data.batteries;
 STATE.market.batteryOffers = data.batteryOffers || [];
 log("MKT: Battery purchased! Added to your Warehouse.");
@@ -5118,7 +5131,7 @@ body: JSON.stringify({ qty, price })
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "POST FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
 log(`MKT: Battery buy order posted: ${qty}x for ${price} $H3 total.`);
 renderBatteryBuyOrders();
@@ -5141,7 +5154,7 @@ body: JSON.stringify({ orderId })
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "CANCEL FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
 log("MKT: Battery buy order cancelled. $H3 refunded.");
 renderBatteryBuyOrders();
@@ -5166,7 +5179,7 @@ body: JSON.stringify({ orderId, batteryId })
 const data = await res.json();
 if (!res.ok) throw new Error(data.msg || "FILL FAILED");
 
-STATE.inventory = data.inventory;
+Object.assign(STATE.inventory, data.inventory);
 if (data.batteries) STATE.power.batteries = data.batteries;
 STATE.market.batteryBuyOrders = data.batteryBuyOrders || [];
 log("MKT: Battery buy order filled. $H3 received.");
