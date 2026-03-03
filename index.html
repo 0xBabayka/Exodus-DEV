@@ -2583,8 +2583,9 @@ drainBuffer(FILTER_CFG.cost.power); STATE.inventory["Ice water"]-=FILTER_CFG.cos
 s.active=true; s.startTime=now(); s.duration=FILTER_CFG.duration; log(`REF: Cell ${id+1} filtering.`); renderWaterFilter(); updateUI(); actionSave();
 }
 async function completeWaterFilter(s) {
-s.active=false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (s._completing) return; // prevent re-trigger in game loop while request is in flight
+s._completing = true; // guard flag — active stays true so autosaves keep active=true in DB until server confirms
+if (!AUTH_TOKEN) { s._completing = false; log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-water-filter`, {
 method: 'POST',
@@ -2592,11 +2593,12 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (!res.ok) { s.active = false; delete s._completing; log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+s.active = false; delete s._completing; // mark done only after server confirms
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.chemistry) STATE.skills.chemistry = data.chemistry;
 log(data.msg || `REF: Cell ${s.id+1} done. +Water, +Regolith.`);
-} catch (e) { log(`REF ERR: ${e.message}`); }
+} catch (e) { s._completing = false; log(`REF ERR: ${e.message}`); }
 renderWaterFilter(); updateUI(); actionSave();
 }
 function startFermentation(mode) {
