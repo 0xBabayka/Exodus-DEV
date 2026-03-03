@@ -1098,7 +1098,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.1c';
+const CLIENT_VERSION = 'v0.2.1b';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -2545,8 +2545,9 @@ s.active = true; s.startTime = now(); s.duration = CAD_CFG.duration;
 log(`ATMOS: C.A.D. Cell ${id+1} started.`); renderCad(); updateUI(); actionSave();
 }
 async function completeCad(s) {
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('CAD ERR: Not authenticated.'); renderCad(); updateUI(); actionSave(); return; }
+if (s._inProgress) return; // prevent re-trigger in game loop while request is in-flight
+s._inProgress = true; // keep s.active=true so save doesn't overwrite DB with active=false prematurely
+if (!AUTH_TOKEN) { s._inProgress = false; log('CAD ERR: Not authenticated.'); renderCad(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-cad`, {
 method: 'POST',
@@ -2554,11 +2555,13 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`CAD ERR: ${data.msg || 'Server error.'}`); renderCad(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`CAD ERR: ${data.msg || 'Server error.'}`); renderCad(); updateUI(); actionSave(); return; }
+s.active = false; // server confirmed completion — now safe to mark inactive locally
+s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.chemistry) STATE.skills.chemistry = data.chemistry;
 log(data.msg || `CAD ${s.id+1} DONE.`);
-} catch (e) { log(`CAD ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`CAD ERR: ${e.message}`); }
 renderCad(); updateUI(); actionSave();
 }
 function renderCad() {
@@ -3066,7 +3069,7 @@ let b=gBats[i]; if(b.charge>0){ let t=Math.min(b.charge, dr); b.charge-=t; dr-=t
 gBats.forEach(b => { /* wear is calculated server-side only */ });
 }
 processBuildQueue(dt);
-STATE.cad.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeCad(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cad-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cad-time-${s.id}`); if (tEl) { let r = s.duration - (currentTime - s.startTime); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.cad.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeCad(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cad-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cad-time-${s.id}`); if (tEl) { let r = s.duration - (currentTime - s.startTime); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.refinery.waterSlots.forEach(s => { if(s.active && (currentTime-s.startTime)>=s.duration) { completeWaterFilter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b=document.getElementById(`wf-bar-${s.id}`); if(b) b.style.width=Math.min(100,((currentTime-s.startTime)/s.duration)*100)+"%"; let tEl = document.getElementById(`wf-time-${s.id}`); if(tEl) { let r=Math.max(0, s.duration-(currentTime-s.startTime)); tEl.innerText=`${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m ${Math.floor((r%60000)/1000)}s`; } } } });
 const f = STATE.refinery.fermenterSlot; if(f.active && (currentTime - f.startTime) >= f.duration) { completeFermentation();
 } else if(f.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`ferment-bar`);
