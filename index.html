@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Exodus-Prime: Forge-7 Command [v7.7 MARKET UPDATE]</title>
+<title>Exodus-Prime</title>
 <style>
 :root {
 --neon: #00E5FF; /* Яркий Циан */
@@ -1098,7 +1098,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.1b';
+const CLIENT_VERSION = 'v0.2.2a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -2271,8 +2271,9 @@ log(`KITCHEN: Roaster ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
 async function completeRoasting(s) {
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-roasting`, {
 method: 'POST',
@@ -2280,11 +2281,12 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.agriculture) STATE.skills.agriculture = data.agriculture;
 log(data.msg || `KITCHEN: Roasting complete.`);
-} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 
@@ -2303,8 +2305,9 @@ log(`KITCHEN: Grinder ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
 async function completeGrinding(s) {
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-grinding`, {
 method: 'POST',
@@ -2312,11 +2315,12 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.agriculture) STATE.skills.agriculture = data.agriculture;
 log(data.msg || `KITCHEN: Grinding complete.`);
-} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 function startBrewing(id) {
@@ -2336,8 +2340,9 @@ log(`KITCHEN: Brewer ${id+1} started.`);
 renderKitchen(); updateUI(); actionSave();
 }
 async function completeBrewing(s) {
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('KITCHEN ERR: Not authenticated.'); renderKitchen(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-brewing`, {
 method: 'POST',
@@ -2345,11 +2350,12 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`KITCHEN ERR: ${data.msg || 'Server error.'}`); renderKitchen(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.agriculture) STATE.skills.agriculture = data.agriculture;
 log(data.msg || `KITCHEN: Brewing complete.`);
-} catch (e) { log(`KITCHEN ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
 
@@ -2618,8 +2624,9 @@ log(`REF: Fermentation (${mode}) started.`); renderWaterFilter(); updateUI(); ac
 }
 async function completeFermentation() {
 const s = STATE.refinery.fermenterSlot;
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('REF ERR: Not authenticated.'); renderWaterFilter(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-fermentation`, {
 method: 'POST',
@@ -2627,12 +2634,13 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({})
 });
 const data = await res.json();
-if (!res.ok) { log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`REF ERR: ${data.msg || 'Server error.'}`); renderWaterFilter(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.agriculture) STATE.skills.agriculture = data.agriculture;
 s.mode = null;
 log(data.msg || `REF: Fermentation complete.`);
-} catch (e) { log(`REF ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`REF ERR: ${e.message}`); }
 renderWaterFilter(); updateUI(); actionSave();
 }
 function renderWaterFilter() {
@@ -2855,8 +2863,9 @@ s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`FUEL: Slot ${id+1} Process (${mode.toUpperCase()}) started.`); renderFuelFactory(); updateUI(); actionSave();
 }
 async function completeFuelProcess(s) {
-s.active = false; // prevent re-trigger in game loop
-if (!AUTH_TOKEN) { log('FUEL ERR: Not authenticated.'); renderFuelFactory(); updateUI(); actionSave(); return; }
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('FUEL ERR: Not authenticated.'); renderFuelFactory(); updateUI(); actionSave(); return; }
 try {
 const res = await fetch(`${API_URL}/game/complete-fuel-process`, {
 method: 'POST',
@@ -2864,12 +2873,13 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ slotId: s.id })
 });
 const data = await res.json();
-if (!res.ok) { log(`FUEL ERR: ${data.msg || 'Server error.'}`); renderFuelFactory(); updateUI(); actionSave(); return; }
+if (!res.ok) { s._inProgress = false; log(`FUEL ERR: ${data.msg || 'Server error.'}`); renderFuelFactory(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.chemistry) STATE.skills.chemistry = data.chemistry;
 s.mode = null;
 log(data.msg || `FUEL: Slot ${s.id+1} complete.`);
-} catch (e) { log(`FUEL ERR: ${e.message}`); }
+} catch (e) { s._inProgress = false; log(`FUEL ERR: ${e.message}`); }
 renderFuelFactory(); updateUI(); actionSave();
 }
 function renderFuelFactory() {
@@ -3071,7 +3081,7 @@ gBats.forEach(b => { /* wear is calculated server-side only */ });
 processBuildQueue(dt);
 STATE.cad.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeCad(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cad-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cad-time-${s.id}`); if (tEl) { let r = s.duration - (currentTime - s.startTime); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.refinery.waterSlots.forEach(s => { if(s.active && (currentTime-s.startTime)>=s.duration) { completeWaterFilter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b=document.getElementById(`wf-bar-${s.id}`); if(b) b.style.width=Math.min(100,((currentTime-s.startTime)/s.duration)*100)+"%"; let tEl = document.getElementById(`wf-time-${s.id}`); if(tEl) { let r=Math.max(0, s.duration-(currentTime-s.startTime)); tEl.innerText=`${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m ${Math.floor((r%60000)/1000)}s`; } } } });
-const f = STATE.refinery.fermenterSlot; if(f.active && (currentTime - f.startTime) >= f.duration) { completeFermentation();
+const f = STATE.refinery.fermenterSlot; if(f.active && !f._inProgress && (currentTime - f.startTime) >= f.duration) { completeFermentation();
 } else if(f.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`ferment-bar`);
 if (b) b.style.width = Math.min(100, ((currentTime - f.startTime) / f.duration) * 100) + "%"; let tEl = document.getElementById(`ferment-time`);
 if (tEl) { let r = Math.max(0, f.duration - (currentTime - f.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } }
@@ -3080,17 +3090,17 @@ STATE.refinery.smelterSlots.forEach(s => { if(s.active && (currentTime - s.start
 STATE.metalworks.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMetalworks(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mw-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mw-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.machineParts.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMachineParts(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mp-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mp-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.printer.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completePrinter(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`pr-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`pr-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.fuelFactory.slots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeFuelProcess(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`fuel-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`fuel-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.fuelFactory.slots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeFuelProcess(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`fuel-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`fuel-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.chemlab.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeChem(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`chem-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`chem-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.kitchen.roasterSlots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeRoasting(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`roast-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`roast-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.kitchen.grinderSlots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeGrinding(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`grind-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`grind-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.kitchen.brewerSlots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeBrewing(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`brew-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`brew-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.kitchen.roasterSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeRoasting(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`roast-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`roast-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.kitchen.grinderSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeGrinding(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`grind-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`grind-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.kitchen.brewerSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeBrewing(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`brew-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`brew-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.composter.slots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeCompost(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cp-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cp-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.greenhouse.slots.forEach(s => { if(s.status==='growing'){ let el = currentTime - s.startTime; let p = (el/s.duration)*100; let b = document.getElementById(`gh-prog-${s.id}`); if(b) b.style.width=Math.min(100,p)+"%"; let t = document.getElementById(`gh-time-${s.id}`); if(t) { let rem = Math.max(0, s.duration - el); t.innerText = `${Math.floor(rem/3600000)}h ${Math.floor((rem%3600000)/60000)}m ${Math.floor((rem%60000)/1000)}s`; } if(p>=100){ s.status='ready'; renderGreenhouse(); } } });
 if(STATE.scavenging.active) { STATE.scavenging.timer+=dt*1000; UI_CACHE['scav-progress'].style.width=(STATE.scavenging.timer/STATE.scavenging.duration)*100+"%"; if(STATE.scavenging.timer>=STATE.scavenging.duration) completeScavenge(); }
 
 // ICE HARVESTER CHECK
-if (STATE.iceHarvester && STATE.iceHarvester.active && (currentTime - STATE.iceHarvester.startTime) >= STATE.iceHarvester.duration) {
+if (STATE.iceHarvester && STATE.iceHarvester.active && !STATE.iceHarvester._inProgress && (currentTime - STATE.iceHarvester.startTime) >= STATE.iceHarvester.duration) {
 completeIceHarvest();
 } else if (STATE.iceHarvester && STATE.iceHarvester.active) {
 const msnModal = document.getElementById('modal-missions');
@@ -3111,7 +3121,7 @@ timerEl.innerText = `${h}h ${m}m ${s}s`;
 }
 
 // REGOLITH HARVESTER CHECK
-if (STATE.regolithHarvester && STATE.regolithHarvester.active && (currentTime - STATE.regolithHarvester.startTime) >= STATE.regolithHarvester.duration) {
+if (STATE.regolithHarvester && STATE.regolithHarvester.active && !STATE.regolithHarvester._inProgress && (currentTime - STATE.regolithHarvester.startTime) >= STATE.regolithHarvester.duration) {
 completeRegolithHarvest();
 } else if (STATE.regolithHarvester && STATE.regolithHarvester.active) {
 const msnModal = document.getElementById('modal-missions');
@@ -3897,9 +3907,9 @@ updateUI(); actionSave();
 async function completeIceHarvest() {
 const ih = STATE.iceHarvester;
 if (!ih || !ih.active) return;
-// Сразу снимаем active чтобы loop не вызвал нас повторно до ответа сервера
-ih.active = false;
-if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+if (ih._inProgress) return;
+ih._inProgress = true;
+if (!AUTH_TOKEN) { ih._inProgress = false; return log('ERR: Not authenticated.'); }
 try {
 const res = await fetch(`${API_URL}/game/harvester/complete`, {
 method: 'POST',
@@ -3907,15 +3917,16 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ harvesterType: 'ice' })
 });
 const data = await res.json();
-if (!res.ok) { log('HARVEST ERR: ' + data.msg); return; }
+if (!res.ok) { ih._inProgress = false; log('HARVEST ERR: ' + data.msg); return; }
 Object.assign(STATE.inventory, data.inventory);
-STATE.iceHarvester = data.harvester;
+STATE.iceHarvester = data.harvester; // server replaces entire object (active=false inside)
 if (data.pe) STATE.skills.planetary_exploration = data.pe;
 log(data.msg);
 renderGroundOps();
 updateUI();
 actionSave();
 } catch(e) {
+ih._inProgress = false;
 log('HARVEST ERR: ' + e.message);
 }
 }
@@ -3965,9 +3976,9 @@ updateUI(); actionSave();
 async function completeRegolithHarvest() {
 const rh = STATE.regolithHarvester;
 if (!rh || !rh.active) return;
-// Сразу снимаем active чтобы loop не вызвал нас повторно до ответа сервера
-rh.active = false;
-if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+if (rh._inProgress) return;
+rh._inProgress = true;
+if (!AUTH_TOKEN) { rh._inProgress = false; return log('ERR: Not authenticated.'); }
 try {
 const res = await fetch(`${API_URL}/game/harvester/complete`, {
 method: 'POST',
@@ -3975,15 +3986,16 @@ headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
 body: JSON.stringify({ harvesterType: 'regolith' })
 });
 const data = await res.json();
-if (!res.ok) { log('REG-HARVEST ERR: ' + data.msg); return; }
+if (!res.ok) { rh._inProgress = false; log('REG-HARVEST ERR: ' + data.msg); return; }
 Object.assign(STATE.inventory, data.inventory);
-STATE.regolithHarvester = data.harvester;
+STATE.regolithHarvester = data.harvester; // server replaces entire object (active=false inside)
 if (data.pe) STATE.skills.planetary_exploration = data.pe;
 log(data.msg);
 renderGroundOps();
 updateUI();
 actionSave();
 } catch(e) {
+rh._inProgress = false;
 log('REG-HARVEST ERR: ' + e.message);
 }
 }
