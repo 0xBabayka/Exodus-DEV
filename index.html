@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3a';
+const CLIENT_VERSION = 'v0.2.3.1a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -1494,8 +1494,10 @@ const ServerSys = {
 save: async function() {
 if(!AUTH_TOKEN) return;
 try {
-// ПРИОРИТЕТ 2: если сервер не ответил за 2с — показываем "SERVER WAKING..."
-scheduleServerStatus('⟳ SERVER WAKING...', 2000);
+// ПРИОРИТЕТ 2: если сервер не ответил за 5с — показываем "SERVER WAKING..."
+// (порог повышен с 2с до 5с: free-tier latency 2–4с не должна давать ложный индикатор;
+//  реальный cold-start Render.com занимает 30–60с, 5с его всё равно поймают)
+scheduleServerStatus('⟳ SERVER WAKING...', 5000);
 // keepalive: true — гарантирует, что запрос дойдёт до сервера
 // даже если страница выгружается (beforeunload / обновление).
 const res = await fetch(`${API_URL}/game/save`, {
@@ -1961,6 +1963,13 @@ STATE.power.gridStatus = totalCharge > 0.001 ? "ONLINE" : "BLACKOUT";
 
 if(AUTH_TOKEN) {
 // Try to auto-login via token
+// ИСПРАВЛЕНИЕ ОТКАТА СОХРАНЕНИЯ: при обновлении страницы beforeunload отправляет
+// keepalive-сохранение, но сервер может обрабатывать его ещё несколько сотен мс.
+// Без задержки /game/load успевает вернуть старые данные из БД раньше, чем
+// keepalive-save записал новые — итог: откат прогресса.
+// Задержка 1200 мс даёт серверу время зафиксировать keepalive до первого load.
+// 1200 мс незаметны пользователю (экран загрузки уже виден), но надёжно устраняют гонку.
+setTimeout(function() {
 fetch(`${API_URL}/game/load`, { headers: { 'x-auth-token': AUTH_TOKEN } })
 .then(res => {
 if(!res.ok) throw new Error("Auth Failed");
@@ -2000,6 +2009,7 @@ startVersionCheck();
 .catch(() => {
 document.getElementById('auth-overlay').style.display = 'flex';
 });
+}, 1200); // конец setTimeout — задержка перед /game/load
 } else {
 document.getElementById('auth-overlay').style.display = 'flex';
 }
