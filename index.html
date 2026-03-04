@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.1a';
+const CLIENT_VERSION = 'v0.2.3.2a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -3089,6 +3089,14 @@ w = Math.floor(Math.random() * (4 - 2 + 1)) + 2; } else { g=Math.floor(Math.rand
 STATE.inventory[i]--; STATE.stamina.val=Math.min(STATE.stamina.max, STATE.stamina.val+g); STATE.inventory["Biological Waste"]+=w;
 if (i !== 'Energy Isotonic') { STATE.cooldowns[i] = now(); }
 log(`BIO: Consumed ${i}. +${g} STM.`); updateUI();
+// ИСПРАВЛЕНИЕ: потребление рациона изменяет inventory, stamina и cooldowns,
+// но ранее actionSave() не вызывался. Это означало что изменения не сохранялись
+// до следующего автосейва (30-60с). В результате:
+// 1. При обновлении страницы рацион откатывался (данные не записаны в БД).
+// 2. Автосейв, срабатывавший вскоре после еды, показывал SERVER WAKING,
+//    который пользователь ассоциировал с рационом, а не с автосейвом.
+// Фикс: явный actionSave() гарантирует немедленное сохранение.
+actionSave();
 }
 
 function createSystem() {
