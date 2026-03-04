@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.5b';
+const CLIENT_VERSION = 'v0.2.3.5c';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -1472,6 +1472,9 @@ async function logout() {
 // Показывает "SERVER WAKING..." когда save/load висит (сервер Render.com засыпает).
 // Таймер: если запрос не завершился за 2с — показываем индикатор, чтобы игрок понял причину.
 let _serverStatusTimer = null;
+// _serverLastOkTs: timestamp of last confirmed-OK server response.
+// Used to suppress false "SERVER WAKING" after start-* ops when server is known-alive.
+let _serverLastOkTs = 0;
 function showServerStatus(msg) {
 const el = document.getElementById('server-status');
 if (!el) return;
@@ -1481,6 +1484,8 @@ el.style.display = 'block';
 function hideServerStatus() {
 clearTimeout(_serverStatusTimer);
 _serverStatusTimer = null;
+// Mark server as recently alive so next actionSave() suppresses false indicator.
+_serverLastOkTs = Date.now();
 const el = document.getElementById('server-status');
 if (el) el.style.display = 'none';
 }
@@ -1497,7 +1502,13 @@ try {
 // ПРИОРИТЕТ 2: если сервер не ответил за 5с — показываем "SERVER WAKING..."
 // (порог повышен с 2с до 5с: free-tier latency 2–4с не должна давать ложный индикатор;
 //  реальный cold-start Render.com занимает 30–60с, 5с его всё равно поймают)
-scheduleServerStatus('⟳ SERVER WAKING...', 5000);
+// FIX: threshold depends on recent server activity.
+// HF Spaces normal response: 3-6s, spikes up to 10s under load.
+// If server replied OK within last 20s (_serverLastOkTs set by hideServerStatus),
+// use 30s threshold -- indicator never fires during normal operation.
+// If no recent OK: use 12s threshold -- catches real cold-starts, not load spikes.
+const _wakeDelay = (Date.now() - _serverLastOkTs < 20000) ? 30000 : 12000;
+scheduleServerStatus('⟳ SERVER WAKING...', _wakeDelay);
 // keepalive: true — гарантирует, что запрос дойдёт до сервера
 // даже если страница выгружается (beforeunload / обновление).
 const res = await fetch(`${API_URL}/game/save`, {
