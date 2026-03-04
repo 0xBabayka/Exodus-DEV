@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.5c';
+const CLIENT_VERSION = 'v0.2.3.5d';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -3329,13 +3329,53 @@ return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px s
 }).join('');
 }
 
-function scavenge() {
-if(STATE.scavenging.active || STATE.power.gridStatus==='BLACKOUT') return;
-let p=STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p<1) return log("ERR: DRONE POWER LOW.");
-if(!useStamina(1)) return;
-STATE.scavenging.lastStart = now(); drainBuffer(1); STATE.scavenging.active=true; STATE.scavenging.timer=0; UI_CACHE['btn-scavenge'].disabled=true; log("SCAV: Scanning...");
-actionSave();
+// _startScavengeInProgress: race condition guard.
+// Prevents duplicate /start-scavenge requests while fetch is in-flight.
+let _startScavengeInProgress = false;
+async function scavenge() {
+if (_startScavengeInProgress) return;
+if (STATE.scavenging.active) return;
+if (!AUTH_TOKEN) return log('SCAV ERR: Not authenticated.');
+// Fast client-side pre-checks for immediate user feedback
+if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+if (p < 1) return log("ERR: DRONE POWER LOW.");
+if (STATE.stamina.val < 1) return log("ALERT: HUNGRY.");
+_startScavengeInProgress = true;
+UI_CACHE['btn-scavenge'].disabled = true;
+log('SCAV: Deploying drone...');
+try {
+    const res = await fetch(`${API_URL}/game/start-scavenge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+        body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        UI_CACHE['btn-scavenge'].disabled = false;
+        _startScavengeInProgress = false;
+        log(`SCAV ERR: ${data.msg || 'Server error.'}`);
+        updateUI();
+        return;
+    }
+    // Server confirmed: activate scavenge with server's authoritative lastStart
+    STATE.scavenging.active    = true;
+    STATE.scavenging.timer     = 0;
+    STATE.scavenging.duration  = 5000;
+    STATE.scavenging.lastStart = data.lastStart || now();
+    // Sync stamina from server (already deducted server-side)
+    if (data.stamina && typeof data.stamina.val === 'number') {
+        STATE.stamina.val = data.stamina.val;
+    }
+    log(data.msg || 'SCAV: Scanning...');
+    updateUI(); actionSave();
+} catch (e) {
+    UI_CACHE['btn-scavenge'].disabled = false;
+    log(`SCAV ERR: ${e.message}`);
+    updateUI();
+} finally {
+    _startScavengeInProgress = false;
+}
 }
 let _scavengeInProgress = false;
 async function completeScavenge() {
