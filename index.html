@@ -5659,6 +5659,7 @@ pubDiv.innerHTML = pubHTML || '<div style="color:#445; text-align:center; paddin
 // Запускается один раз при входе в игру и затем каждые 5 минут.
 // При расхождении версий — показывает попап с предложением обновить страницу.
 let _versionCheckInterval = null;
+let _versionCheckStarted  = false; // guard: предотвращает повторный запуск при многократном вызове startVersionCheck
 
 async function checkVersion() {
     try {
@@ -5675,6 +5676,7 @@ async function checkVersion() {
             if (overlay) overlay.classList.add('visible');
             // Останавливаем интервал — попап уже показан
             if (_versionCheckInterval) { clearInterval(_versionCheckInterval); _versionCheckInterval = null; }
+            _versionCheckStarted = false; // сбрасываем guard — после reload можно запустить снова
         }
     } catch(e) {
         // Сеть недоступна — тихо игнорируем, не мешаем игре
@@ -5682,6 +5684,11 @@ async function checkVersion() {
 }
 
 function startVersionCheck() {
+    // Guard: если проверка уже запущена — не создавать дублирующие setTimeout/setInterval.
+    // startVersionCheck вызывается в 3 местах (login, register, auto-load),
+    // без guard создавались тройные интервалы, которые невозможно было остановить.
+    if (_versionCheckStarted) return;
+    _versionCheckStarted = true;
     // Первая проверка через 10 секунд после входа (даём игре загрузиться)
     setTimeout(() => {
         checkVersion();
@@ -5711,7 +5718,15 @@ function startVersionCheck() {
         'register': () => register,
         'logout': () => logout,
         'toggleAuth': () => toggleAuth,
-        'location_reload': () => () => location.reload(true),
+        'location_reload': () => () => {
+            // FIX: location.reload(true) is ignored in Chrome>=92, Firefox>=93, Safari.
+            // The forceReload parameter was removed from spec - browser serves cached HTML.
+            // Fix: redirect to same URL with cache-busting _v=timestamp param.
+            // This guarantees a fresh index.html with the actual CLIENT_VERSION.
+            const url = new URL(window.location.href);
+            url.searchParams.set('_v', Date.now());
+            window.location.replace(url.toString());
+        },
         // Navigation / modals
         'openBaseModalFromUI': () => openBaseModalFromUI,
         'openHangar': () => openHangar,
