@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.2.1c';
+const CLIENT_VERSION = 'v0.2.3a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -1206,6 +1206,35 @@ if (marketFetchTimeout) clearTimeout(marketFetchTimeout);
 marketFetchTimeout = setTimeout(() => {
 loadMarketData();
 }, 300); // 300ms debounce
+}
+});
+
+// ИСПРАВЛЕНИЕ: покупатель buy-ордера теперь получает реальный-тайм уведомление о пришедших
+// ресурсах. Без этого следующий autosave перезаписывал БД старым состоянием клиента и
+// купленные ресурсы безвозвратно терялись.
+socket.on('inventory_credit', (data) => {
+if (data && data.inventory) {
+Object.assign(STATE.inventory, data.inventory);
+updateUI();
+if (data.item && data.qty) {
+log(`MKT: +${data.qty} ${data.item} received — buy order filled.`);
+}
+// Если рынок открыт — обновляем виды
+if (document.getElementById('modal-market').style.display === 'block') {
+renderBuyOrdersTab();
+}
+}
+});
+
+// ИСПРАВЛЕНИЕ: батарея из battery buy-ордера аналогично доставляется клиенту.
+socket.on('battery_credit', (data) => {
+if (data && Array.isArray(data.batteries)) {
+STATE.power.batteries = data.batteries;
+updateUI();
+log('MKT: Battery received — buy order filled.');
+if (document.getElementById('modal-market').style.display === 'block') {
+renderBatteryBuyOrders();
+}
 }
 });
 
@@ -2606,8 +2635,20 @@ s.active = false; delete s._completing; // mark done only after server confirms
 if (data.inventory) Object.assign(STATE.inventory, data.inventory);
 if (data.chemistry) STATE.skills.chemistry = data.chemistry;
 log(data.msg || `REF: Cell ${s.id+1} done. +Water, +Regolith.`);
-} catch (e) { s._completing = false; log(`REF ERR: ${e.message}`); }
+// ИСПРАВЛЕНИЕ: renderWaterFilter/updateUI/actionSave перенесены ВНУТРЬ try-блока
+// (в ветку успеха), чтобы actionSave не вызывался при сетевой ошибке.
+// При ошибке сети сервер мог уже записать active=false в БД — вызов actionSave
+// с active=true из STATE провоцировал рейс-кондишн двойного списания энергии.
 renderWaterFilter(); updateUI(); actionSave();
+} catch (e) {
+// Сетевая ошибка: НЕ вызываем actionSave() — при ошибке сети сервер мог уже
+// обработать запрос и записать active=false в БД. Вызов save с active=true (STATE)
+// спровоцирует рейс-кондишн в detectStarts. Просто сбрасываем флаг —
+// следующий тик game loop повторит попытку через completeWaterFilter.
+s._completing = false;
+log(`REF ERR: ${e.message}`);
+renderWaterFilter(); updateUI();
+}
 }
 function startFermentation(mode) {
 const s = STATE.refinery.fermenterSlot; const cfg = FERMENT_CFG[mode];
@@ -3079,7 +3120,7 @@ gBats.forEach(b => { /* wear is calculated server-side only */ });
 }
 processBuildQueue(dt);
 STATE.cad.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeCad(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cad-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cad-time-${s.id}`); if (tEl) { let r = s.duration - (currentTime - s.startTime); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.refinery.waterSlots.forEach(s => { if(s.active && (currentTime-s.startTime)>=s.duration) { completeWaterFilter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b=document.getElementById(`wf-bar-${s.id}`); if(b) b.style.width=Math.min(100,((currentTime-s.startTime)/s.duration)*100)+"%"; let tEl = document.getElementById(`wf-time-${s.id}`); if(tEl) { let r=Math.max(0, s.duration-(currentTime-s.startTime)); tEl.innerText=`${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m ${Math.floor((r%60000)/1000)}s`; } } } });
+STATE.refinery.waterSlots.forEach(s => { if(s.active && !s._completing && (currentTime-s.startTime)>=s.duration) { completeWaterFilter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b=document.getElementById(`wf-bar-${s.id}`); if(b) b.style.width=Math.min(100,((currentTime-s.startTime)/s.duration)*100)+"%"; let tEl = document.getElementById(`wf-time-${s.id}`); if(tEl) { let r=Math.max(0, s.duration-(currentTime-s.startTime)); tEl.innerText=`${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m ${Math.floor((r%60000)/1000)}s`; } } } });
 const f = STATE.refinery.fermenterSlot; if(f.active && !f._inProgress && (currentTime - f.startTime) >= f.duration) { completeFermentation();
 } else if(f.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`ferment-bar`);
 if (b) b.style.width = Math.min(100, ((currentTime - f.startTime) / f.duration) * 100) + "%"; let tEl = document.getElementById(`ferment-time`);
@@ -4643,8 +4684,14 @@ body: JSON.stringify({ item, qty, price })
 const data = await res.json();
 if(!res.ok) throw new Error(data.msg || "POST FAILED");
 
-// Update Local State immediately for responsiveness
-STATE.inventory[item] -= qty;
+// ИСПРАВЛЕНИЕ: раньше делался ручной декремент STATE.inventory[item] -= qty,
+// который не синхронизировался с авторитативным ответом сервера.
+// Теперь используем data.inventory — точное состояние инвентаря из БД после выставления оффера.
+if (data.inventory) {
+Object.assign(STATE.inventory, data.inventory);
+} else {
+STATE.inventory[item] = (STATE.inventory[item] || 0) - qty;
+}
 STATE.market.offers = data.offers || []; // Server returns updated list
 
 log(`MKT: Listed ${qty} ${item} for ${price} $H3.`);
