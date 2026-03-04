@@ -3003,18 +3003,49 @@ return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px s
 }).join('');
 }
 
-function startMetalworks(id, mode) {
-const s = STATE.metalworks.slots[id]; const cfg = METALWORKS_CFG[mode];
-if (s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if (p < cfg.cost.power) return log("ERR: LOW POWER.");
-if (mode === 'alum_plate') { if ((STATE.inventory["Aluminium Ore"]||0) < cfg.cost["Aluminium Ore"]) return log("ERR: MISSING ALUM. ORE.");
-STATE.inventory["Aluminium Ore"] -= cfg.cost["Aluminium Ore"]; } else if (mode === 'titanium_plate') { if ((STATE.inventory["Titanium Ore"]||0) < cfg.cost["Titanium Ore"]) return log("ERR: MISSING TITANIUM ORE.");
-STATE.inventory["Titanium Ore"] -= cfg.cost["Titanium Ore"]; }
-useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
-s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
-log(`FACTORY: Metalworks ${id+1} started [${mode.toUpperCase()}].`); renderMetalworks(); updateUI(); actionSave();
+// _startMetalworksInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startMetalworksInProgress = [false, false, false];
+async function startMetalworks(id, mode) {
+    if (_startMetalworksInProgress[id]) return;
+    const s = STATE.metalworks.slots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('METALWORKS ERR: Not authenticated.');
+    const cfg = METALWORKS_CFG[mode];
+    if (!cfg) return;
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < cfg.cost.power) return log("ERR: LOW POWER.");
+    if (mode === 'alum_plate') {
+        if ((STATE.inventory["Aluminium Ore"]||0) < cfg.cost["Aluminium Ore"]) return log("ERR: MISSING ALUM. ORE.");
+    } else if (mode === 'titanium_plate') {
+        if ((STATE.inventory["Titanium Ore"]||0) < cfg.cost["Titanium Ore"]) return log("ERR: MISSING TITANIUM ORE.");
+    }
+    _startMetalworksInProgress[id] = true;
+    log(`FACTORY: Metalworks ${id + 1} starting [${mode.toUpperCase()}]...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-metalworks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id, mode })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`METALWORKS ERR: ${data.msg || 'Server error.'}`);
+            renderMetalworks(); updateUI();
+            return;
+        }
+        if (data.inventory)       Object.assign(STATE.inventory, data.inventory);
+        if (data.metalworksSlots) STATE.metalworks.slots = data.metalworksSlots;
+        log(data.msg || `FACTORY: Metalworks ${id + 1} activated [${mode.toUpperCase()}].`);
+    } catch (e) {
+        log(`METALWORKS ERR: ${e.message}`);
+    } finally {
+        _startMetalworksInProgress[id] = false;
+    }
+    renderMetalworks(); updateUI(); actionSave();
 }
 async function completeMetalworks(s) {
 if (s._inProgress) return;
