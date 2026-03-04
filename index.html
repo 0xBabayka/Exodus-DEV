@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.2.1b';
+const CLIENT_VERSION = 'v0.2.2.1c';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -4258,9 +4258,10 @@ align-items:center;"> <span style="color:#eee; margin-right:5px;">${Math.floor(v
 const gBats = STATE.power.batteries.filter(b => b.loc === 'grid'); let gh = "";
 if (gBats.length === 0) gh = "<div style='color:var(--danger); font-size:9px; font-weight:bold; animation:blink 1s infinite;'>[!] NO POWER</div>";
 else { gh = gBats.map(b => { 
-const cp=(b.charge/POWER_CFG.batteryCap)*100, dp=b.wear, ep=Math.max(0,100-cp-dp);
+const cpRaw=(b.charge/POWER_CFG.batteryCap)*100, dp=b.wear;
+const cp=Math.min(100,Math.max(0,cpRaw)), ep=Math.max(0,100-cp-dp);
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
-return `<div class="battery-item active-slot" style="border-color:${bCol}; background: linear-gradient(90deg, ${bCol}22 0%, transparent 100%);"><span class="bat-id" style="color:${bCol}; text-shadow: 0 0 3px ${bCol}88;">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 5px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><span class="bat-text" style="color:#aaa;">${b.wear.toFixed(1)}% WR</span><button class="bat-action-btn eject" data-fn="ejectBattery" data-args='["${b.id}"]'>EJECT</button></div>`; 
+return `<div class="battery-item active-slot" style="border-color:${bCol}; background: linear-gradient(90deg, ${bCol}22 0%, transparent 100%);"><span class="bat-id" style="color:${bCol}; text-shadow: 0 0 3px ${bCol}88;">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 5px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><span class="bat-text" style="color:${bCol}; font-weight:bold;">${cp.toFixed(1)}%</span><span class="bat-text" style="color:#aaa; margin-left:4px;">${b.wear.toFixed(1)}% WR</span><button class="bat-action-btn eject" data-fn="ejectBattery" data-args='["${b.id}"]'>EJECT</button></div>`; 
 }).join('');
 } for(let i=0; i < (POWER_CFG.maxGridSlots - gBats.length); i++) gh += `<div style="border:1px dashed #334; padding:4px; font-size:9px; color:#445; text-align:center; margin-bottom:4px;">[ EMPTY SLOT ]</div>`;
 if(UI_CACHE['active-grid-list']) UI_CACHE['active-grid-list'].innerHTML = gh;
