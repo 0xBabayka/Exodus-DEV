@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.4c';
+const CLIENT_VERSION = 'v0.2.3.5a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -2282,16 +2282,38 @@ log(`ERR: destroyBattery — ${e.message}`);
 }
 }
 
-function createRation(type) {
-const r = RATION_RECIPES[type];
-if(!r) return;
-if(STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p < r.energy) return log("ERR: LOW ENERGY.");
-if((STATE.inventory.Food||0)<r.food || (STATE.inventory.Water||0)<r.water) return log("ERR: MISSING INGREDIENTS.");
-drainBuffer(r.energy); STATE.inventory.Food-=r.food; STATE.inventory.Water-=r.water;
-STATE.inventory[type]=(STATE.inventory[type]||0)+1;
-log(`KITCHEN: ${type} prepared.`); updateUI();
+// --- CREATE RATION: server-authoritative ---
+// _createRationInProgress: race condition guard.
+// Prevents duplicate requests from rapid clicking while fetch is in-flight.
+let _createRationInProgress = false;
+async function createRation(type) {
+    if (_createRationInProgress) return;
+    const r = RATION_RECIPES[type];
+    if (!r) return;
+    if (!['Snack', 'Meal', 'Feast'].includes(type)) return log('KITCHEN ERR: Invalid ration type.');
+    if (!AUTH_TOKEN) return log('KITCHEN ERR: Not authenticated.');
+    _createRationInProgress = true;
+    log(`KITCHEN: Preparing ${type}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/create-ration`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ type })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`KITCHEN ERR: ${data.msg || 'Server error.'}`);
+            updateUI();
+            return;
+        }
+        if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+        log(data.msg || `KITCHEN: ${type} prepared.`);
+    } catch (e) {
+        log(`KITCHEN ERR: ${e.message}`);
+    } finally {
+        _createRationInProgress = false;
+    }
+    updateUI(); actionSave();
 }
 
 function startRoasting(id) {
@@ -2328,19 +2350,43 @@ log(data.msg || `KITCHEN: Roasting complete.`);
 renderKitchen(); updateUI(); actionSave();
 }
 
-function startGrinding(id) {
-const s = STATE.kitchen.grinderSlots[id];
-if (s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if (STATE.stamina.val < GRINDER_CFG.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if (p < GRINDER_CFG.cost.power) return log("ERR: LOW POWER.");
-if ((STATE.inventory["Roasted Guarana"]||0) < GRINDER_CFG.cost["Roasted Guarana"]) return log("ERR: MISSING ROASTED GUARANA.");
-useStamina(GRINDER_CFG.cost.stamina);
-drainBuffer(GRINDER_CFG.cost.power);
-STATE.inventory["Roasted Guarana"] -= GRINDER_CFG.cost["Roasted Guarana"];
-s.active = true; s.startTime = now(); s.duration = GRINDER_CFG.duration;
-log(`KITCHEN: Grinder ${id+1} started.`);
-renderKitchen(); updateUI(); actionSave();
+// _startGrindingInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startGrindingInProgress = [false, false];
+async function startGrinding(id) {
+    if (_startGrindingInProgress[id]) return;
+    const s = STATE.kitchen.grinderSlots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('KITCHEN ERR: Not authenticated.');
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < GRINDER_CFG.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < GRINDER_CFG.cost.power) return log("ERR: LOW POWER.");
+    if ((STATE.inventory["Roasted Guarana"]||0) < GRINDER_CFG.cost["Roasted Guarana"]) return log("ERR: MISSING ROASTED GUARANA.");
+    _startGrindingInProgress[id] = true;
+    log(`KITCHEN: Starting Grinder ${id + 1}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-grinding`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`KITCHEN ERR: ${data.msg || 'Server error.'}`);
+            renderKitchen(); updateUI();
+            return;
+        }
+        if (data.inventory)    Object.assign(STATE.inventory, data.inventory);
+        if (data.grinderSlots) STATE.kitchen.grinderSlots = data.grinderSlots;
+        log(data.msg || `KITCHEN: Grinder ${id + 1} started.`);
+    } catch (e) {
+        log(`KITCHEN ERR: ${e.message}`);
+    } finally {
+        _startGrindingInProgress[id] = false;
+    }
+    renderKitchen(); updateUI(); actionSave();
 }
 async function completeGrinding(s) {
 if (s._inProgress) return;
@@ -2361,21 +2407,44 @@ log(data.msg || `KITCHEN: Grinding complete.`);
 } catch (e) { s._inProgress = false; log(`KITCHEN ERR: ${e.message}`); }
 renderKitchen(); updateUI(); actionSave();
 }
-function startBrewing(id) {
-const s = STATE.kitchen.brewerSlots[id];
-if (s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if (STATE.stamina.val < BREWING_CFG.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if (p < BREWING_CFG.cost.power) return log("ERR: LOW POWER.");
-if ((STATE.inventory["Ground Guarana"]||0) < BREWING_CFG.cost["Ground Guarana"]) return log("ERR: MISSING GROUND GUARANA.");
-if ((STATE.inventory.Water||0) < BREWING_CFG.cost.water) return log("ERR: MISSING WATER.");
-useStamina(BREWING_CFG.cost.stamina);
-drainBuffer(BREWING_CFG.cost.power);
-STATE.inventory["Ground Guarana"] -= BREWING_CFG.cost["Ground Guarana"];
-STATE.inventory.Water -= BREWING_CFG.cost.water;
-s.active = true; s.startTime = now(); s.duration = BREWING_CFG.duration;
-log(`KITCHEN: Brewer ${id+1} started.`);
-renderKitchen(); updateUI(); actionSave();
+// _startBrewingInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startBrewingInProgress = [false, false];
+async function startBrewing(id) {
+    if (_startBrewingInProgress[id]) return;
+    const s = STATE.kitchen.brewerSlots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('KITCHEN ERR: Not authenticated.');
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < BREWING_CFG.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < BREWING_CFG.cost.power) return log("ERR: LOW POWER.");
+    if ((STATE.inventory["Ground Guarana"]||0) < BREWING_CFG.cost["Ground Guarana"]) return log("ERR: MISSING GROUND GUARANA.");
+    if ((STATE.inventory.Water||0) < BREWING_CFG.cost.water) return log("ERR: MISSING WATER.");
+    _startBrewingInProgress[id] = true;
+    log(`KITCHEN: Starting Brewer ${id + 1}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-brewing`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`KITCHEN ERR: ${data.msg || 'Server error.'}`);
+            renderKitchen(); updateUI();
+            return;
+        }
+        if (data.inventory)   Object.assign(STATE.inventory, data.inventory);
+        if (data.brewerSlots) STATE.kitchen.brewerSlots = data.brewerSlots;
+        log(data.msg || `KITCHEN: Brewer ${id + 1} started.`);
+    } catch (e) {
+        log(`KITCHEN ERR: ${e.message}`);
+    } finally {
+        _startBrewingInProgress[id] = false;
+    }
+    renderKitchen(); updateUI(); actionSave();
 }
 async function completeBrewing(s) {
 if (s._inProgress) return;
@@ -2439,47 +2508,81 @@ return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px s
 }
 }
 
-function plantCrop(type) {
-const s = STATE.greenhouse.selectedSlot; if(s===null) return;
-const c = CROPS[type];
-if(STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
-if(STATE.stamina.val < c.cost.stamina) return log("ERR: TIRED.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p < c.cost.energy) return log("ERR: LOW ENERGY.");
-if((STATE.inventory.Water||0)<c.cost.water || (STATE.inventory.Soil||0)<c.cost.soil || (STATE.inventory["Seeds: "+type]||0)<c.cost.seed) return log("ERR: MISSING RES.");
-useStamina(c.cost.stamina); drainBuffer(c.cost.energy);
-STATE.inventory.Water-=c.cost.water;
-STATE.inventory.Soil-=c.cost.soil; STATE.inventory["Seeds: "+type]-=c.cost.seed;
-const slot = STATE.greenhouse.slots[s];
-slot.status='growing'; slot.crop=type; slot.startTime=now(); slot.duration=c.time;
-log(`AGRI: Planted ${type}.`); closeCropSelect(); renderGreenhouse(); updateUI();
+// _plantCropInProgress: race condition guard.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _plantCropInProgress = false;
+async function plantCrop(type) {
+    if (_plantCropInProgress) return;
+    const s = STATE.greenhouse.selectedSlot;
+    if (s === null) return;
+    if (!AUTH_TOKEN) return log('AGRI ERR: Not authenticated.');
+    const c = CROPS[type];
+    if (!c) return;
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < c.cost.stamina) return log("ERR: TIRED.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < c.cost.energy) return log("ERR: LOW ENERGY.");
+    if ((STATE.inventory.Water || 0) < c.cost.water || (STATE.inventory.Soil || 0) < c.cost.soil || (STATE.inventory["Seeds: " + type] || 0) < c.cost.seed) return log("ERR: MISSING RES.");
+    _plantCropInProgress = true;
+    closeCropSelect();
+    log(`AGRI: Planting ${type}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-plant`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: s, type })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`AGRI ERR: ${data.msg || 'Server error.'}`);
+            renderGreenhouse(); updateUI();
+            return;
+        }
+        if (data.inventory)  Object.assign(STATE.inventory, data.inventory);
+        if (data.greenhouse) STATE.greenhouse.slots = data.greenhouse;
+        log(data.msg || `AGRI: Planted ${type}.`);
+    } catch (e) {
+        log(`AGRI ERR: ${e.message}`);
+    } finally {
+        _plantCropInProgress = false;
+    }
+    renderGreenhouse(); updateUI(); actionSave();
 }
 
-function harvestCrop(id) {
-const s = STATE.greenhouse.slots[id];
-if(s.status!=='ready') return;
-const c = CROPS[s.crop];
-let y = Math.floor(Math.random()*(c.yieldMax-c.yieldMin+1))+c.yieldMin;
-const bonusStacks = Math.floor(STATE.skills.agriculture.lvl / 5);
-if(bonusStacks > 0 && Math.random() < (bonusStacks * 0.10)) { y=Math.floor(y*1.5); log("AGRI: CRITICAL HARVEST (LUCKY BONUS)!"); }
-if (s.crop === 'Sprouts' || s.crop === 'Potato' || s.crop === 'Maize') { STATE.inventory.Food=(STATE.inventory.Food||0)+y; log(`AGRI: +${y} Food.`); }
-else { STATE.inventory[s.crop]=(STATE.inventory[s.crop]||0)+y; log(`AGRI: +${y} ${s.crop}.`); }
-
-// MODIFIED SEED DROP LOGIC
-if (Math.random() < 0.25) {
-let sMin = 1, sMax = 3;
-if(s.crop === 'Amaranth' || s.crop === 'Guarana') { sMax = 5; }
-
-let sCount = Math.floor(Math.random() * (sMax - sMin + 1)) + sMin;
-STATE.inventory["Seeds: " + s.crop] = (STATE.inventory["Seeds: " + s.crop] || 0) + sCount;
-log(`AGRI: Lucky! Recovered ${sCount} ${s.crop} Seeds.`);
-}
-
-STATE.skills.agriculture.xp+=c.xp;
-if(!STATE.skills.agriculture.locked && STATE.skills.agriculture.lvl < 60) {
-if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) {
-if(STATE.skills.agriculture.lvl % 10 === 0) { STATE.skills.agriculture.locked = true; STATE.skills.agriculture.xp = STATE.skills.agriculture.next; log(`SKILL: AGRICULTURE Proficiency Locked at LVL ${STATE.skills.agriculture.lvl}. License required.`); } else { levelUpSkill('agriculture'); } } }
-s.status='empty'; s.crop=null; renderGreenhouse(); updateUI(); actionSave();
+// --- HARVEST CROP: server-authoritative ---
+// _harvestCropInProgress: race condition guard.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _harvestCropInProgress = false;
+async function harvestCrop(id) {
+    if (_harvestCropInProgress) return;
+    const s = STATE.greenhouse.slots[id];
+    if (!s || s.status !== 'ready') return;
+    if (!AUTH_TOKEN) return log('AGRI ERR: Not authenticated.');
+    _harvestCropInProgress = true;
+    log(`AGRI: Harvesting slot ${id + 1}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/complete-harvest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`AGRI ERR: ${data.msg || 'Server error.'}`);
+            renderGreenhouse(); updateUI();
+            return;
+        }
+        if (data.inventory)   Object.assign(STATE.inventory, data.inventory);
+        if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+        if (data.greenhouse)  STATE.greenhouse.slots   = data.greenhouse;
+        log(data.msg || 'AGRI: Harvest complete.');
+    } catch (e) {
+        log(`AGRI ERR: ${e.message}`);
+    } finally {
+        _harvestCropInProgress = false;
+    }
+    renderGreenhouse(); updateUI(); actionSave();
 }
 
 function renderGreenhouse() {
@@ -2499,34 +2602,64 @@ const seedsVal = document.getElementById('gh-seeds-val'); if(seedsVal) seedsVal.
 function openCropSelect(id) { if(STATE.greenhouse.slots[id].status!=='empty')return; STATE.greenhouse.selectedSlot=id; document.getElementById('crop-select-overlay').style.display='flex'; }
 function closeCropSelect() { document.getElementById('crop-select-overlay').style.display='none'; STATE.greenhouse.selectedSlot=null; }
 
-function startCompost(id) {
-const s = STATE.composter.slots[id];
-if(s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p < COMPOST_CFG.cost.energy) return log("ERR: LOW POWER.");
-if((STATE.inventory.Regolith||0) < COMPOST_CFG.cost.regolith) return log("ERR: NO REGOLITH.");
-if((STATE.inventory["Biological Waste"]||0) < COMPOST_CFG.cost.waste) return log("ERR: NO WASTE.");
-if((STATE.inventory.Water||0) < COMPOST_CFG.cost.water) return log("ERR: NO WATER.");
-if(!useStamina(COMPOST_CFG.cost.stamina)) return;
-drainBuffer(COMPOST_CFG.cost.energy);
-STATE.inventory.Regolith -= COMPOST_CFG.cost.regolith;
-STATE.inventory["Biological Waste"] -= COMPOST_CFG.cost.waste;
-STATE.inventory.Water -= COMPOST_CFG.cost.water;
-s.active = true; s.startTime = now(); s.duration = COMPOST_CFG.duration;
-log(`BIO: Composter ${id+1} started.`);
-renderComposter(); updateUI(); actionSave();
+// _startCompostInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startCompostInProgress = [false, false, false];
+async function startCompost(id) {
+    if (_startCompostInProgress[id]) return;
+    const s = STATE.composter.slots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('COMPOST ERR: Not authenticated.');
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < COMPOST_CFG.cost.energy) return log("ERR: LOW POWER.");
+    if ((STATE.inventory.Regolith||0) < COMPOST_CFG.cost.regolith) return log("ERR: NO REGOLITH.");
+    if ((STATE.inventory["Biological Waste"]||0) < COMPOST_CFG.cost.waste) return log("ERR: NO WASTE.");
+    if ((STATE.inventory.Water||0) < COMPOST_CFG.cost.water) return log("ERR: NO WATER.");
+    if (STATE.stamina.val < COMPOST_CFG.cost.stamina) return log("ALERT: HUNGRY.");
+    _startCompostInProgress[id] = true;
+    log(`BIO: Starting Composter ${id + 1}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-compost`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`COMPOST ERR: ${data.msg || 'Server error.'}`);
+            renderComposter(); updateUI();
+            return;
+        }
+        if (data.inventory)      Object.assign(STATE.inventory, data.inventory);
+        if (data.composterSlots) STATE.composter.slots = data.composterSlots;
+        log(data.msg || `BIO: Composter ${id + 1} started.`);
+    } catch (e) {
+        log(`COMPOST ERR: ${e.message}`);
+    } finally {
+        _startCompostInProgress[id] = false;
+    }
+    renderComposter(); updateUI(); actionSave();
 }
-function completeCompost(s) {
-s.active = false;
-STATE.inventory.Soil = (STATE.inventory.Soil||0) + COMPOST_CFG.output.soil;
-let msg = `BIO: Composter ${s.id+1} finished. +${COMPOST_CFG.output.soil} Soil`;
-STATE.skills.agriculture.xp += 15;
-if (Math.random() < 0.1111) { let worms = Math.floor(Math.random() * 5) + 1; STATE.inventory.Worms = (STATE.inventory.Worms || 0) + worms;
-STATE.skills.agriculture.xp += 5; msg += ` & found ${worms} Worms!`; }
-if(!STATE.skills.agriculture.locked && STATE.skills.agriculture.lvl < 60) {
-if(STATE.skills.agriculture.xp >= STATE.skills.agriculture.next) {
-if(STATE.skills.agriculture.lvl % 10 === 0) { STATE.skills.agriculture.locked = true; STATE.skills.agriculture.xp = STATE.skills.agriculture.next; log(`SKILL: AGRICULTURE Proficiency Locked at LVL ${STATE.skills.agriculture.lvl}. License required.`); } else { levelUpSkill('agriculture'); } } }
-log(msg + "."); renderComposter(); updateUI(); actionSave();
+async function completeCompost(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('COMPOST ERR: Not authenticated.'); renderComposter(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-compost`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`COMPOST ERR: ${data.msg || 'Server error.'}`); renderComposter(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.agriculture) STATE.skills.agriculture = data.agriculture;
+log(data.msg || `BIO: Composter ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`COMPOST ERR: ${e.message}`); }
+renderComposter(); updateUI(); actionSave();
 }
 function renderComposter() {
 const c = document.getElementById('composter-ui'); if(!c) return;
@@ -2540,31 +2673,58 @@ data-fn="startCompost" data-args='[${s.id}]' ${s.active?'disabled':''}>${s.activ
 }).join('');
 }
 
-function startSabatier(id, mode) {
-const s = STATE.refinery.sabatierSlots[id]; const cfg = SABATIER_CFG[mode];
-if(s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if(STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p < cfg.cost.power) return log("ERR: LOW POWER.");
-if(mode === 'split') { if((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: NO WATER.");
-} else if(mode === 'methane') { if((STATE.inventory.H2||0) < cfg.cost.h2) return log("ERR: NO H2."); if((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: NO CO2.");
+// --- START SABATIER: server-authoritative ---
+// _startSabatierInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click).
+let _startSabatierInProgress = [false, false];
+async function startSabatier(id, mode) {
+    if (_startSabatierInProgress[id]) return;
+    const s = STATE.refinery.sabatierSlots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('SABATIER ERR: Not authenticated.');
+    _startSabatierInProgress[id] = true;
+    log(`SABATIER: Starting Reactor ${id + 1} [${mode.toUpperCase()}]...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-sabatier`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id, mode })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`SABATIER ERR: ${data.msg || 'Server error.'}`);
+            renderSabatier(); updateUI();
+            return;
+        }
+        if (data.inventory)      Object.assign(STATE.inventory, data.inventory);
+        if (data.sabatierSlots)  STATE.refinery.sabatierSlots = data.sabatierSlots;
+        log(data.msg || `SABATIER: Reactor ${id + 1} started [${mode.toUpperCase()}].`);
+    } catch (e) {
+        log(`SABATIER ERR: ${e.message}`);
+    } finally {
+        _startSabatierInProgress[id] = false;
+    }
+    renderSabatier(); updateUI(); actionSave();
 }
-useStamina(cfg.cost.stamina);
-if(mode === 'split') { STATE.inventory.Water -= cfg.cost.water; } else if(mode === 'methane') { STATE.inventory.H2 -= cfg.cost.h2; STATE.inventory.CO2 -= cfg.cost.co2; }
-drainBuffer(cfg.cost.power);
-s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
-log(`SABATIER: Reactor ${id+1} started [${mode.toUpperCase()}].`); renderSabatier(); updateUI(); actionSave();
-}
-function completeSabatier(s) {
-const cfg = SABATIER_CFG[s.mode]; let xp = 0;
-if(s.mode === 'split') { STATE.inventory.H2 = (STATE.inventory.H2||0) + cfg.output.h2; STATE.inventory.O2 = (STATE.inventory.O2||0) + cfg.output.o2;
-let msg = `SABATIER: Reactor ${s.id+1} finished. +H2, +O2`; xp += 8;
-if (Math.random() < 0.2222) { let haliteAmt = Math.floor(Math.random() * (6 - 2 + 1)) + 2;
-STATE.inventory.Halite = (STATE.inventory.Halite || 0) + haliteAmt; msg += `, +${haliteAmt} Halite`; xp += 5; } log(msg + "."); }
-else if(s.mode === 'methane') { STATE.inventory.Methane = (STATE.inventory.Methane||0) + cfg.output.methane; STATE.inventory.Water = (STATE.inventory.Water||0) + cfg.output.water;
-log(`SABATIER: Reactor ${s.id+1} finished. +Methane, +Water.`); xp += 15; }
-if(xp > 0) { tryAddSkillXp('chemistry', xp); }
-s.active = false; s.mode = null; renderSabatier(); updateUI(); actionSave();
+async function completeSabatier(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('SABATIER ERR: Not authenticated.'); renderSabatier(); updateUI(); actionSave(); return; }
+const modeSnapshot = s.mode;
+try {
+const res = await fetch(`${API_URL}/game/complete-sabatier`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id, mode: modeSnapshot })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`SABATIER ERR: ${data.msg || 'Server error.'}`); renderSabatier(); updateUI(); actionSave(); return; }
+s.active = false; s.mode = null; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.chemistry) STATE.skills.chemistry = data.chemistry;
+log(data.msg || `SABATIER: Reactor ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`SABATIER ERR: ${e.message}`); }
+renderSabatier(); updateUI(); actionSave();
 }
 function renderSabatier() {
 const c = document.getElementById('sabatier-ui'); if(!c) return;
@@ -2619,15 +2779,38 @@ Output: CO₂, N₂, Ar, Ne...</div><div style="display:flex; justify-content:sp
 }).join('');
 }
 
-function startWaterFilter(id) {
-const s = STATE.refinery.waterSlots[id];
-if(s.active || STATE.power.gridStatus==='BLACKOUT') return;
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p<FILTER_CFG.cost.power) return log("ERR: LOW POWER.");
-if((STATE.inventory["Ice water"]||0)<FILTER_CFG.cost.ice) return log("ERR: NO ICE.");
-if(!useStamina(FILTER_CFG.cost.stamina)) return;
-drainBuffer(FILTER_CFG.cost.power); STATE.inventory["Ice water"]-=FILTER_CFG.cost.ice;
-s.active=true; s.startTime=now(); s.duration=FILTER_CFG.duration; log(`REF: Cell ${id+1} filtering.`); renderWaterFilter(); updateUI(); actionSave();
+// --- START WATER FILTER: server-authoritative ---
+// _startWaterFilterInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click).
+let _startWaterFilterInProgress = [false, false];
+async function startWaterFilter(id) {
+    if (_startWaterFilterInProgress[id]) return;
+    const s = STATE.refinery.waterSlots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('REF ERR: Not authenticated.');
+    _startWaterFilterInProgress[id] = true;
+    log(`REF: Starting Water Filter Cell ${id + 1}...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-water-filter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`REF ERR: ${data.msg || 'Server error.'}`);
+            renderWaterFilter(); updateUI();
+            return;
+        }
+        if (data.inventory)   Object.assign(STATE.inventory, data.inventory);
+        if (data.waterSlots)  STATE.refinery.waterSlots = data.waterSlots;
+        log(data.msg || `REF: Cell ${id + 1} filtering.`);
+    } catch (e) {
+        log(`REF ERR: ${e.message}`);
+    } finally {
+        _startWaterFilterInProgress[id] = false;
+    }
+    renderWaterFilter(); updateUI(); actionSave();
 }
 async function completeWaterFilter(s) {
 if (s._completing) return; // prevent re-trigger in game loop while request is in flight
@@ -2660,17 +2843,46 @@ log(`REF ERR: ${e.message}`);
 renderWaterFilter(); updateUI();
 }
 }
-function startFermentation(mode) {
-const s = STATE.refinery.fermenterSlot; const cfg = FERMENT_CFG[mode];
-if(s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if(STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if(p < cfg.cost.power) return log("ERR: LOW POWER.");
-if(mode === 'amaranth') { if((STATE.inventory.Amaranth||0) < cfg.cost.amaranth) return log("ERR: NO AMARANTH."); STATE.inventory.Amaranth -= cfg.cost.amaranth;
-} else if(mode === 'guarana') { if((STATE.inventory.Guarana||0) < cfg.cost.guarana) return log("ERR: NO GUARANA."); STATE.inventory.Guarana -= cfg.cost.guarana; }
-useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
-s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
-log(`REF: Fermentation (${mode}) started.`); renderWaterFilter(); updateUI(); actionSave();
+// _startFermentationInProgress: race condition guard (single fermenter slot).
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startFermentationInProgress = false;
+async function startFermentation(mode) {
+    if (_startFermentationInProgress) return;
+    const s = STATE.refinery.fermenterSlot;
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('REF ERR: Not authenticated.');
+    const cfg = FERMENT_CFG[mode];
+    if (!cfg) return;
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < cfg.cost.power) return log("ERR: LOW POWER.");
+    if (mode === 'amaranth') { if ((STATE.inventory.Amaranth||0) < cfg.cost.amaranth) return log("ERR: NO AMARANTH."); }
+    else if (mode === 'guarana') { if ((STATE.inventory.Guarana||0) < cfg.cost.guarana) return log("ERR: NO GUARANA."); }
+    _startFermentationInProgress = true;
+    log(`REF: Starting Fermentation (${mode})...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-fermentation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ mode })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`REF ERR: ${data.msg || 'Server error.'}`);
+            renderWaterFilter(); updateUI();
+            return;
+        }
+        if (data.inventory)     Object.assign(STATE.inventory, data.inventory);
+        if (data.fermenterSlot) Object.assign(STATE.refinery.fermenterSlot, data.fermenterSlot);
+        log(data.msg || `REF: Fermentation (${mode}) started.`);
+    } catch (e) {
+        log(`REF ERR: ${e.message}`);
+    } finally {
+        _startFermentationInProgress = false;
+    }
+    renderWaterFilter(); updateUI(); actionSave();
 }
 async function completeFermentation() {
 const s = STATE.refinery.fermenterSlot;
@@ -2712,28 +2924,52 @@ html += `<div class="wf-slot" style="border-color: #8844cc; margin-top:10px;"><d
 c.innerHTML = html;
 }
 
-function startSmelter(id, mode) {
-const s = STATE.refinery.smelterSlots[id]; const cfg = SMELTER_CFG[mode];
-if (s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if (p < cfg.cost.power) return log("ERR: LOW POWER.");
-if (mode === 'iron') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
-else if (mode === 'steel') { if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: NO CO2.");
-if ((STATE.inventory["Iron Ore"]||0) < cfg.cost["Iron Ore"]) return log("ERR: NO IRON ORE."); }
-else if (mode === 'aluminium') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
-else if (mode === 'copper') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
-else if (mode === 'titanium') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
-else if (mode === 'silicon') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH.");
-if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: NO CO2."); }
-useStamina(cfg.cost.stamina);
-if (mode === 'iron') { STATE.inventory.Regolith -= cfg.cost.regolith; } else if (mode === 'steel') { STATE.inventory.CO2 -= cfg.cost.co2;
-STATE.inventory["Iron Ore"] -= cfg.cost["Iron Ore"]; } else if (mode === 'aluminium') { STATE.inventory.Regolith -= cfg.cost.regolith;
-} else if (mode === 'copper') { STATE.inventory.Regolith -= cfg.cost.regolith; } else if (mode === 'titanium') { STATE.inventory.Regolith -= cfg.cost.regolith;
-} else if (mode === 'silicon') { STATE.inventory.Regolith -= cfg.cost.regolith; STATE.inventory.CO2 -= cfg.cost.co2; }
-drainBuffer(cfg.cost.power);
-s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
-log(`SMELTER: Crucible ${id+1} activated [${mode.toUpperCase()}].`); renderSmelter(); updateUI(); actionSave();
+// _startSmelterInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startSmelterInProgress = [false, false];
+async function startSmelter(id, mode) {
+    if (_startSmelterInProgress[id]) return;
+    const s = STATE.refinery.smelterSlots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('SMELTER ERR: Not authenticated.');
+    const cfg = SMELTER_CFG[mode];
+    if (!cfg) return;
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < cfg.cost.power) return log("ERR: LOW POWER.");
+    if (mode === 'iron')      { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
+    else if (mode === 'steel')     { if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: NO CO2.");
+                                     if ((STATE.inventory["Iron Ore"]||0) < cfg.cost["Iron Ore"]) return log("ERR: NO IRON ORE."); }
+    else if (mode === 'aluminium') { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
+    else if (mode === 'copper')    { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
+    else if (mode === 'titanium')  { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH."); }
+    else if (mode === 'silicon')   { if ((STATE.inventory.Regolith||0) < cfg.cost.regolith) return log("ERR: NO REGOLITH.");
+                                     if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: NO CO2."); }
+    _startSmelterInProgress[id] = true;
+    log(`SMELTER: Starting Crucible ${id + 1} [${mode.toUpperCase()}]...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-smelter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id, mode })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`SMELTER ERR: ${data.msg || 'Server error.'}`);
+            renderSmelter(); updateUI();
+            return;
+        }
+        if (data.inventory)    Object.assign(STATE.inventory, data.inventory);
+        if (data.smelterSlots) STATE.refinery.smelterSlots = data.smelterSlots;
+        log(data.msg || `SMELTER: Crucible ${id + 1} activated [${mode.toUpperCase()}].`);
+    } catch (e) {
+        log(`SMELTER ERR: ${e.message}`);
+    } finally {
+        _startSmelterInProgress[id] = false;
+    }
+    renderSmelter(); updateUI(); actionSave();
 }
 async function completeSmelter(s) {
 if (s._inProgress) return;
@@ -2780,17 +3016,24 @@ useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`FACTORY: Metalworks ${id+1} started [${mode.toUpperCase()}].`); renderMetalworks(); updateUI(); actionSave();
 }
-function completeMetalworks(s) {
-s.active = false; let msg = ""; const cfg = METALWORKS_CFG[s.mode]; let xp = 0;
-if (s.mode === 'alum_plate') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `FACTORY: Produced ${yieldAmt} Aluminium Plate`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 5) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Aluminium Plate"] = (STATE.inventory["Aluminium Plate"] || 0) + yieldAmt;
-xp = 35; } else if (s.mode === 'titanium_plate') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `FACTORY: Produced ${yieldAmt} Titanium Plate`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 5) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Titanium Plate"] = (STATE.inventory["Titanium Plate"] || 0) + yieldAmt;
-xp = 55; }
-if(xp > 0) { tryAddSkillXp('metallurgy', xp); }
-s.mode = null; log(msg + "."); renderMetalworks(); updateUI(); actionSave();
+async function completeMetalworks(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('METALWORKS ERR: Not authenticated.'); renderMetalworks(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-metalworks`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`METALWORKS ERR: ${data.msg || 'Server error.'}`); renderMetalworks(); updateUI(); actionSave(); return; }
+s.active = false; s.mode = null; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.metallurgy) STATE.skills.metallurgy = data.metallurgy;
+log(data.msg || `FACTORY: Metalworks slot ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`METALWORKS ERR: ${e.message}`); }
+renderMetalworks(); updateUI(); actionSave();
 }
 function renderMetalworks() {
 const c = document.getElementById('metalworks-ui'); if(!c) return;
@@ -2819,17 +3062,24 @@ useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`FACTORY: Machine Shop ${id+1} started [${mode.toUpperCase()}].`); renderMachineParts(); updateUI(); actionSave();
 }
-function completeMachineParts(s) {
-s.active = false; let msg = ""; const cfg = MACHINE_PARTS_CFG[s.mode]; let xp = 0;
-if (s.mode === 'machined_parts') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `FACTORY: Produced ${yieldAmt} Machined Parts`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 2) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Machined Parts"] = (STATE.inventory["Machined Parts"] || 0) + yieldAmt;
-xp = 90; } else if (s.mode === 'moving_parts') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `FACTORY: Produced ${yieldAmt} Moving Parts`; if (Math.random() < 0.1111) { let bonus = Math.floor(Math.random() * 2) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Moving Parts"] = (STATE.inventory["Moving Parts"] || 0) + yieldAmt;
-xp = 140; }
-if(xp > 0) { tryAddSkillXp('engineering', xp); }
-s.mode = null; log(msg + "."); renderMachineParts(); updateUI(); actionSave();
+async function completeMachineParts(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('MACHINEPARTS ERR: Not authenticated.'); renderMachineParts(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-machine-parts`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`MACHINEPARTS ERR: ${data.msg || 'Server error.'}`); renderMachineParts(); updateUI(); actionSave(); return; }
+s.active = false; s.mode = null; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.engineering) STATE.skills.engineering = data.engineering;
+log(data.msg || `FACTORY: Machine shop ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`MACHINEPARTS ERR: ${e.message}`); }
+renderMachineParts(); updateUI(); actionSave();
 }
 function renderMachineParts() {
 const c = document.getElementById('machineparts-content'); if(!c) return;
@@ -2863,16 +3113,24 @@ useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`PRINTER: Job ${id+1} started [${mode.toUpperCase()}].`); renderPrinter(); updateUI(); actionSave();
 }
-function completePrinter(s) {
-s.active = false; let msg = ""; const cfg = PRINTER_CFG[s.mode]; let xp = 0;
-if (s.mode === 'structural_part') { let yieldAmt = cfg.output; msg = `PRINTER: Produced ${yieldAmt} Structural Parts`;
-STATE.inventory["Structural Part"] = (STATE.inventory["Structural Part"] || 0) + yieldAmt; xp = 40;
-} else if (s.mode === 'pvc_pipe') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `PRINTER: Produced ${yieldAmt} PVC Pipe`; STATE.inventory["PVC Pipe"] = (STATE.inventory["PVC Pipe"] || 0) + yieldAmt; xp = 25; }
-else if (s.mode === 'electronic_parts') { let yieldAmt = Math.floor(Math.random() * (cfg.output.max - cfg.output.min + 1)) + cfg.output.min;
-msg = `PRINTER: Produced ${yieldAmt} Electronic Parts`; STATE.inventory["Electronic Parts"] = (STATE.inventory["Electronic Parts"] || 0) + yieldAmt; xp = 45; }
-if(xp > 0) { tryAddSkillXp('engineering', xp); }
-s.mode = null; log(msg + "."); renderPrinter(); updateUI(); actionSave();
+async function completePrinter(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('PRINTER ERR: Not authenticated.'); renderPrinter(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-printer`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`PRINTER ERR: ${data.msg || 'Server error.'}`); renderPrinter(); updateUI(); actionSave(); return; }
+s.active = false; s.mode = null; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.engineering) STATE.skills.engineering = data.engineering;
+log(data.msg || `PRINTER: Slot ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`PRINTER ERR: ${e.message}`); }
+renderPrinter(); updateUI(); actionSave();
 }
 function renderPrinter() {
 const c = document.getElementById('printer-ui'); if(!c) return;
@@ -2936,59 +3194,85 @@ return `<div style="background:rgba(255,255,255,0.02); padding:5px; border:1px s
 }).join('');
 }
 
-function startChem(id, mode) {
-const s = STATE.chemlab.slots[id]; const cfg = CHEM_CFG[mode];
-if (s.active || STATE.power.gridStatus === 'BLACKOUT') return;
-if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
-let p = STATE.power.batteries.filter(b=>b.loc==='grid').reduce((a,b)=>a+b.charge,0);
-if (p < cfg.cost.power) return log("ERR: LOW POWER.");
-if (mode === 'pvc') { if ((STATE.inventory.Methane||0) < cfg.cost.methane) return log("ERR: MISSING METHANE.");
-if ((STATE.inventory.H2||0) < cfg.cost.h2) return log("ERR: MISSING H2."); if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER.");
-} else if (mode === 'perchlorate') { if ((STATE.inventory.Halite||0) < cfg.cost.halite) return log("ERR: MISSING HALITE.");
-if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER."); } else if (mode === 'pla') { if ((STATE.inventory["Fermented Amaranth"]||0) < cfg.cost["Fermented Amaranth"]) return log("ERR: MISSING FERM. AMARANTH.");
-if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: MISSING CO2."); } else if (mode === 'empty_battery') { if ((STATE.inventory.Perchlorate||0) < cfg.cost.perchlorate) return log("ERR: MISSING PERCHLORATE.");
-if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER."); if ((STATE.inventory["Iron Ore"]||0) < cfg.cost["Iron Ore"]) return log("ERR: MISSING IRON ORE.");
-if ((STATE.inventory.PVC||0) < cfg.cost.PVC) return log("ERR: MISSING PVC."); } else if (mode === 'electric_silicon') { if ((STATE.inventory["Raw silicon"]||0) < cfg.cost["Raw silicon"]) return log("ERR: MISSING RAW SILICON.");
+// _startChemInProgress[id]: race condition guard per slot.
+// Prevents duplicate requests while fetch is in-flight (double-click, rapid tap).
+let _startChemInProgress = [false, false, false, false];
+async function startChem(id, mode) {
+    if (_startChemInProgress[id]) return;
+    const s = STATE.chemlab.slots[id];
+    if (!s || s.active) return;
+    if (!AUTH_TOKEN) return log('CHEM ERR: Not authenticated.');
+    const cfg = CHEM_CFG[mode];
+    if (!cfg) return;
+    // Fast client-side pre-checks for immediate user feedback
+    if (STATE.power.gridStatus === 'BLACKOUT') return log("ERR: NO POWER.");
+    if (STATE.stamina.val < cfg.cost.stamina) return log("ALERT: HUNGRY.");
+    let p = STATE.power.batteries.filter(b => b.loc === 'grid').reduce((a, b) => a + b.charge, 0);
+    if (p < cfg.cost.power) return log("ERR: LOW POWER.");
+    if (mode === 'pvc') {
+        if ((STATE.inventory.Methane||0) < cfg.cost.methane) return log("ERR: MISSING METHANE.");
+        if ((STATE.inventory.H2||0) < cfg.cost.h2) return log("ERR: MISSING H2.");
+        if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER.");
+    } else if (mode === 'perchlorate') {
+        if ((STATE.inventory.Halite||0) < cfg.cost.halite) return log("ERR: MISSING HALITE.");
+        if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER.");
+    } else if (mode === 'pla') {
+        if ((STATE.inventory["Fermented Amaranth"]||0) < cfg.cost["Fermented Amaranth"]) return log("ERR: MISSING FERM. AMARANTH.");
+        if ((STATE.inventory.CO2||0) < cfg.cost.co2) return log("ERR: MISSING CO2.");
+    } else if (mode === 'empty_battery') {
+        if ((STATE.inventory.Perchlorate||0) < cfg.cost.perchlorate) return log("ERR: MISSING PERCHLORATE.");
+        if ((STATE.inventory.Water||0) < cfg.cost.water) return log("ERR: MISSING WATER.");
+        if ((STATE.inventory["Iron Ore"]||0) < cfg.cost["Iron Ore"]) return log("ERR: MISSING IRON ORE.");
+        if ((STATE.inventory.PVC||0) < cfg.cost.PVC) return log("ERR: MISSING PVC.");
+    } else if (mode === 'electric_silicon') {
+        if ((STATE.inventory["Raw silicon"]||0) < cfg.cost["Raw silicon"]) return log("ERR: MISSING RAW SILICON.");
+    }
+    _startChemInProgress[id] = true;
+    log(`CHEM: Starting Reaction ${id + 1} [${mode.toUpperCase()}]...`);
+    try {
+        const res = await fetch(`${API_URL}/game/start-chem`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+            body: JSON.stringify({ slotId: id, mode })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            log(`CHEM ERR: ${data.msg || 'Server error.'}`);
+            renderChemLab(); updateUI();
+            return;
+        }
+        if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+        if (data.chemSlots)  STATE.chemlab.slots = data.chemSlots;
+        log(data.msg || `CHEM: Reaction ${id + 1} started [${mode.toUpperCase()}].`);
+    } catch (e) {
+        log(`CHEM ERR: ${e.message}`);
+    } finally {
+        _startChemInProgress[id] = false;
+    }
+    renderChemLab(); updateUI(); actionSave();
 }
-useStamina(cfg.cost.stamina); drainBuffer(cfg.cost.power);
-if (mode === 'pvc') { STATE.inventory.Methane -= cfg.cost.methane; STATE.inventory.H2 -= cfg.cost.h2; STATE.inventory.Water -= cfg.cost.water;
-} else if (mode === 'perchlorate') { STATE.inventory.Halite -= cfg.cost.halite; STATE.inventory.Water -= cfg.cost.water;
-} else if (mode === 'pla') { STATE.inventory["Fermented Amaranth"] -= cfg.cost["Fermented Amaranth"]; STATE.inventory.CO2 -= cfg.cost.co2;
-} else if (mode === 'empty_battery') { STATE.inventory.Perchlorate -= cfg.cost.perchlorate; STATE.inventory.Water -= cfg.cost.water; STATE.inventory["Iron Ore"] -= cfg.cost["Iron Ore"];
-STATE.inventory.PVC -= cfg.cost.PVC; } else if (mode === 'electric_silicon') { STATE.inventory["Raw silicon"] -= cfg.cost["Raw silicon"]; }
-s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
-log(`CHEM: Reaction ${id+1} started [${mode.toUpperCase()}].`); renderChemLab(); updateUI(); actionSave();
-}
-function completeChem(s) {
-s.active = false; let msg = ""; let xp = 0; const bonusStacks = Math.floor(STATE.skills.chemistry.lvl / 5);
-const lucky = (bonusStacks > 0 && Math.random() < (bonusStacks * 0.10));
-if (s.mode === 'pvc') { let amt = Math.floor(Math.random() * (4 - 2 + 1)) + 2;
-msg = `CHEM: Synthesized ${amt} PVC`; if (lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-amt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory.PVC = (STATE.inventory.PVC || 0) + amt; xp = 15;
-} else if (s.mode === 'perchlorate') { let amt = Math.floor(Math.random() * (3 - 1 + 1)) + 1;
-msg = `CHEM: Synthesized ${amt} Perchlorate`; STATE.inventory.Perchlorate = (STATE.inventory.Perchlorate || 0) + amt; xp = 18;
-} else if (s.mode === 'pla') { let amt = Math.floor(Math.random() * (10 - 5 + 1)) + 5;
-msg = `CHEM: Synthesized ${amt} PLA`; STATE.inventory.PLA = (STATE.inventory.PLA || 0) + amt; xp = 12;
-} else if (s.mode === 'empty_battery') { let amt = 1;
-if (lucky) { let bonus = Math.floor(Math.random() * 2) + 1; amt += bonus; msg = `CHEM: Power Cell synthesis complete (+${bonus} Bonus!)`; } else { msg = `CHEM: Power Cell synthesis complete`; }
-xp = 10;
-(function(amount) {
-if (!AUTH_TOKEN) { log('CHEM ERR: Not authenticated. Power Cell not saved.'); return; }
-fetch(`${API_URL}/game/chem/create-battery`, {
-method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
-body: JSON.stringify({ qty: amount, slotId: s.id })
-}).then(function(r) { return r.json(); }).then(function(data) {
-if (data.batteries) { STATE.power.batteries = data.batteries; }
-log(`CHEM: ${amount} Power Cell(s) placed in Stored Power Cells (Warehouse).`);
+async function completeChem(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('CHEM ERR: Not authenticated.'); renderChemLab(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-chem`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`CHEM ERR: ${data.msg || 'Server error.'}`); renderChemLab(); updateUI(); actionSave(); return; }
+s.active = false; s.mode = null; s.startTime = 0; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.chemistry) STATE.skills.chemistry = data.chemistry;
+if (data.batteries) {
+STATE.power.batteries = data.batteries;
 if (document.getElementById('modal-warehouse') && document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
-updateUI();
-}).catch(function(e) { log(`CHEM ERR: ${e.message}`); });
-})(amt);
-} else if (s.mode === 'electric_silicon') { let amt = 2; msg = `CHEM: Synthesized ${amt} Electric Silicon`;
-if (lucky) { let bonus = 1; amt += bonus; msg += ` (+${bonus} Bonus!)`;
-} STATE.inventory["Electric silicon"] = (STATE.inventory["Electric silicon"] || 0) + amt; xp = 25; }
-if(xp > 0) { tryAddSkillXp('chemistry', xp); }
-s.mode = null; log(msg + "."); renderChemLab(); updateUI(); actionSave();
+}
+log(data.msg || `CHEM: Slot ${s.id+1} complete.`);
+} catch (e) { s._inProgress = false; log(`CHEM ERR: ${e.message}`); }
+renderChemLab(); updateUI(); actionSave();
 }
 function renderChemLab() {
 const c = document.getElementById('chemlab-ui'); if(!c) return;
@@ -3011,23 +3295,41 @@ if(!useStamina(1)) return;
 STATE.scavenging.lastStart = now(); drainBuffer(1); STATE.scavenging.active=true; STATE.scavenging.timer=0; UI_CACHE['btn-scavenge'].disabled=true; log("SCAV: Scanning...");
 actionSave();
 }
-function completeScavenge() {
-STATE.scavenging.active = false; UI_CACHE['btn-scavenge'].disabled = false; UI_CACHE['scav-progress'].style.width = "0%";
-const sSkill = STATE.skills.scavenging;
-if (!sSkill.locked && sSkill.lvl < 60) { sSkill.xp += 2;
-if(sSkill.xp >= sSkill.next) { if (sSkill.lvl % 10 === 0) { sSkill.locked = true; sSkill.xp = sSkill.next;
-log(`SKILL: Scavenging Proficiency Locked at LVL ${sSkill.lvl}. License required.`); } else { levelUpScavenging(); } } }
-let msg = "FOUND: "; let r = Math.floor(Math.random() * 5) + 1; STATE.inventory.Regolith = (STATE.inventory.Regolith || 0) + r;
-msg += `${r} Regolith. `; let i = Math.floor(Math.random() * 3) + 1;
-STATE.inventory["Ice water"] = (STATE.inventory["Ice water"] || 0) + i; msg += `${i} Ice. `;
-if (Math.random() < 0.3333) { let s = Math.floor(Math.random() * 5) + 1; STATE.inventory.Scrap = (STATE.inventory.Scrap || 0) + s;
-msg += `${s} Scrap. `; }
-const bonusStacks = Math.floor(sSkill.lvl / 5);
-if (bonusStacks > 0) { const chance = bonusStacks * 0.10;
-if (Math.random() < chance) { let bonusAmt = Math.floor(Math.random() * 5) + 1;
-if (Math.random() > 0.5) { STATE.inventory.Scrap += bonusAmt; msg += ` +${bonusAmt} Scrap (Lucky!)`; } else { STATE.inventory.Regolith += bonusAmt;
-msg += ` +${bonusAmt} Regolith (Lucky!)`; } } }
-log(msg); updateUI(); actionSave();
+let _scavengeInProgress = false;
+async function completeScavenge() {
+if (_scavengeInProgress) return;
+_scavengeInProgress = true;
+if (!AUTH_TOKEN) {
+_scavengeInProgress = false;
+STATE.scavenging.active = false;
+UI_CACHE['btn-scavenge'].disabled = false;
+UI_CACHE['scav-progress'].style.width = "0%";
+log('SCAV ERR: Not authenticated.');
+updateUI(); actionSave(); return;
+}
+try {
+const res = await fetch(`${API_URL}/game/complete-scavenge`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({})
+});
+const data = await res.json();
+STATE.scavenging.active = false;
+UI_CACHE['btn-scavenge'].disabled = false;
+UI_CACHE['scav-progress'].style.width = "0%";
+_scavengeInProgress = false;
+if (!res.ok) { log(`SCAV ERR: ${data.msg || 'Server error.'}`); updateUI(); actionSave(); return; }
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.scavenging) STATE.skills.scavenging = data.scavenging;
+log(data.msg || 'SCAV: Scan complete.');
+} catch (e) {
+_scavengeInProgress = false;
+STATE.scavenging.active = false;
+UI_CACHE['btn-scavenge'].disabled = false;
+UI_CACHE['scav-progress'].style.width = "0%";
+log(`SCAV ERR: ${e.message}`);
+}
+updateUI(); actionSave();
 }
 function levelUpSkill(key) {
 const s = STATE.skills[key]; s.lvl++; s.xp = 0;
@@ -3134,19 +3436,19 @@ const f = STATE.refinery.fermenterSlot; if(f.active && !f._inProgress && (curren
 } else if(f.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`ferment-bar`);
 if (b) b.style.width = Math.min(100, ((currentTime - f.startTime) / f.duration) * 100) + "%"; let tEl = document.getElementById(`ferment-time`);
 if (tEl) { let r = Math.max(0, f.duration - (currentTime - f.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } }
-STATE.refinery.sabatierSlots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeSabatier(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sab-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sab-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.refinery.sabatierSlots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeSabatier(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sab-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sab-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.refinery.smelterSlots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeSmelter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sm-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sm-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.metalworks.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMetalworks(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mw-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mw-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.machineParts.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMachineParts(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mp-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mp-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.printer.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completePrinter(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`pr-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`pr-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.metalworks.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeMetalworks(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mw-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mw-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.machineParts.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeMachineParts(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mp-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mp-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.printer.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completePrinter(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`pr-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`pr-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.fuelFactory.slots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeFuelProcess(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`fuel-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`fuel-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.chemlab.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeChem(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`chem-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`chem-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.chemlab.slots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeChem(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`chem-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`chem-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.kitchen.roasterSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeRoasting(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`roast-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`roast-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.kitchen.grinderSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeGrinding(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`grind-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`grind-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.kitchen.brewerSlots.forEach(s => { if (s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeBrewing(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`brew-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`brew-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.composter.slots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeCompost(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cp-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cp-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.composter.slots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeCompost(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`cp-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`cp-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.greenhouse.slots.forEach(s => { if(s.status==='growing'){ let el = currentTime - s.startTime; let p = (el/s.duration)*100; let b = document.getElementById(`gh-prog-${s.id}`); if(b) b.style.width=Math.min(100,p)+"%"; let t = document.getElementById(`gh-time-${s.id}`); if(t) { let rem = Math.max(0, s.duration - el); t.innerText = `${Math.floor(rem/3600000)}h ${Math.floor((rem%3600000)/60000)}m ${Math.floor((rem%60000)/1000)}s`; } if(p>=100){ s.status='ready'; renderGreenhouse(); } } });
-if(STATE.scavenging.active) { STATE.scavenging.timer+=dt*1000; UI_CACHE['scav-progress'].style.width=(STATE.scavenging.timer/STATE.scavenging.duration)*100+"%"; if(STATE.scavenging.timer>=STATE.scavenging.duration) completeScavenge(); }
+if(STATE.scavenging.active) { STATE.scavenging.timer+=dt*1000; UI_CACHE['scav-progress'].style.width=(STATE.scavenging.timer/STATE.scavenging.duration)*100+"%"; if(STATE.scavenging.timer>=STATE.scavenging.duration && !_scavengeInProgress) completeScavenge(); }
 
 // ICE HARVESTER CHECK
 if (STATE.iceHarvester && STATE.iceHarvester.active && !STATE.iceHarvester._inProgress && (currentTime - STATE.iceHarvester.startTime) >= STATE.iceHarvester.duration) {
