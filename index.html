@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.4b';
+const CLIENT_VERSION = 'v0.2.3.4c';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -2735,33 +2735,24 @@ drainBuffer(cfg.cost.power);
 s.active = true; s.mode = mode; s.startTime = now(); s.duration = cfg.duration;
 log(`SMELTER: Crucible ${id+1} activated [${mode.toUpperCase()}].`); renderSmelter(); updateUI(); actionSave();
 }
-function completeSmelter(s) {
-s.active = false; let msg = ""; let xp = 0; const bonusStacks = Math.floor(STATE.skills.metallurgy.lvl / 5);
-const lucky = (bonusStacks > 0 && Math.random() < (bonusStacks * 0.10));
-if (s.mode === 'iron') { let yieldAmt = Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-msg = `SMELTER ${s.id+1}: Extracted ${yieldAmt} Iron Ore`; if(lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Iron Ore"] = (STATE.inventory["Iron Ore"] || 0) + yieldAmt;
-xp = 12; } else if (s.mode === 'steel') { let yieldAmt = Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-msg = `FORGE ${s.id+1}: Created ${yieldAmt} Steel`; if(lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory.Steel = (STATE.inventory.Steel || 0) + yieldAmt;
-if(Math.random() < 0.1111) { let bariteAmt = Math.floor(Math.random() * (5 - 1 + 1)) + 1;
-STATE.inventory.Barite = (STATE.inventory.Barite || 0) + bariteAmt; msg += ` Found ${bariteAmt} Barite!`; } xp = 18;
-} else if (s.mode === 'aluminium') { let yieldAmt = Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-msg = `SMELTER ${s.id+1}: Extracted ${yieldAmt} Alum. Ore`; if(lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Aluminium Ore"] = (STATE.inventory["Aluminium Ore"] || 0) + yieldAmt;
-xp = 15; } else if (s.mode === 'copper') { let yieldAmt = Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-msg = `SMELTER ${s.id+1}: Extracted ${yieldAmt} Copper Ore`; if(lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Copper Ore"] = (STATE.inventory["Copper Ore"] || 0) + yieldAmt;
-if(Math.random() < 0.1111) { let bariteAmt = Math.floor(Math.random() * (5 - 1 + 1)) + 1;
-STATE.inventory.Barite = (STATE.inventory.Barite || 0) + bariteAmt; msg += ` Found ${bariteAmt} Barite!`; } xp = 14;
-} else if (s.mode === 'titanium') { let yieldAmt = Math.floor(Math.random() * (5 - 2 + 1)) + 2;
-msg = `SMELTER ${s.id+1}: Extracted ${yieldAmt} Titanium Ore`; if(lucky) { let bonus = Math.floor(Math.random() * (8 - 1 + 1)) + 1;
-yieldAmt += bonus; msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Titanium Ore"] = (STATE.inventory["Titanium Ore"] || 0) + yieldAmt;
-xp = 20; } else if (s.mode === 'silicon') { let yieldAmt = 1;
-msg = `SMELTER ${s.id+1}: Produced ${yieldAmt} Raw silicon`; if(lucky) { let bonus = 1; yieldAmt += bonus;
-msg += ` (+${bonus} Bonus!)`; } STATE.inventory["Raw silicon"] = (STATE.inventory["Raw silicon"] || 0) + yieldAmt; xp = 10; }
-if(xp > 0) { tryAddSkillXp('metallurgy', xp); }
-s.mode = null; log(msg); renderSmelter(); updateUI(); actionSave();
+async function completeSmelter(s) {
+if (s._inProgress) return;
+s._inProgress = true;
+if (!AUTH_TOKEN) { s._inProgress = false; log('SMELTER ERR: Not authenticated.'); renderSmelter(); updateUI(); actionSave(); return; }
+try {
+const res = await fetch(`${API_URL}/game/complete-smelter`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+body: JSON.stringify({ slotId: s.id })
+});
+const data = await res.json();
+if (!res.ok) { s._inProgress = false; log(`SMELTER ERR: ${data.msg || 'Server error.'}`); renderSmelter(); updateUI(); actionSave(); return; }
+s.active = false; s._inProgress = false;
+if (data.inventory) Object.assign(STATE.inventory, data.inventory);
+if (data.metallurgy) STATE.skills.metallurgy = data.metallurgy;
+log(data.msg || `SMELTER ${s.id+1}: Complete.`);
+} catch (e) { s._inProgress = false; log(`SMELTER ERR: ${e.message}`); }
+renderSmelter(); updateUI(); actionSave();
 }
 function renderSmelter() {
 const c = document.getElementById('smelter-ui'); if(!c) return;
@@ -3144,7 +3135,7 @@ const f = STATE.refinery.fermenterSlot; if(f.active && !f._inProgress && (curren
 if (b) b.style.width = Math.min(100, ((currentTime - f.startTime) / f.duration) * 100) + "%"; let tEl = document.getElementById(`ferment-time`);
 if (tEl) { let r = Math.max(0, f.duration - (currentTime - f.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } }
 STATE.refinery.sabatierSlots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeSabatier(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sab-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sab-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
-STATE.refinery.smelterSlots.forEach(s => { if(s.active && (currentTime - s.startTime) >= s.duration) { completeSmelter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sm-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sm-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
+STATE.refinery.smelterSlots.forEach(s => { if(s.active && !s._inProgress && (currentTime - s.startTime) >= s.duration) { completeSmelter(s); } else if(s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`sm-bar-${s.id}`); if(b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`sm-time-${s.id}`); if(tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.metalworks.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMetalworks(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mw-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mw-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.machineParts.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completeMachineParts(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`mp-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`mp-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
 STATE.printer.slots.forEach(s => { if (s.active && (currentTime - s.startTime) >= s.duration) { completePrinter(s); } else if (s.active) { const modal = document.getElementById('modal-base'); if (modal && modal.style.display === 'block') { let b = document.getElementById(`pr-bar-${s.id}`); if (b) b.style.width = Math.min(100, ((currentTime - s.startTime) / s.duration) * 100) + "%"; let tEl = document.getElementById(`pr-time-${s.id}`); if (tEl) { let r = Math.max(0, s.duration - (currentTime - s.startTime)); tEl.innerText = `${Math.floor(r/3600000)}h ${Math.floor((r%3600000)/60000)}m`; } } } });
