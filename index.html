@@ -1098,7 +1098,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.2a';
+const CLIENT_VERSION = 'v0.2.2b';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -3484,7 +3484,7 @@ log(`PROBE ERR: Request failed — ${e.message}`);
 }
 }
 
-function drainBuffer(a) { let td=a; for(let b of STATE.power.batteries.filter(x=>x.loc==='grid')){ if(td<=0)break; if(b.charge>0){ let t=Math.min(b.charge,td); b.charge-=t; td-=t; }} }
+function drainBuffer(a) { let td=a; const gBats=STATE.power.batteries.filter(x=>x.loc==='grid'); for(let i=gBats.length-1;i>=0;i--){ if(td<=0)break; const b=gBats[i]; if(b.charge>0){ let t=Math.min(b.charge,td); b.charge-=t; td-=t; }} }
 
 function switchTab(t) {
 document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -4259,7 +4259,7 @@ align-items:center;"> <span style="color:#eee; margin-right:5px;">${Math.floor(v
 const gBats = STATE.power.batteries.filter(b => b.loc === 'grid'); let gh = "";
 if (gBats.length === 0) gh = "<div style='color:var(--danger); font-size:9px; font-weight:bold; animation:blink 1s infinite;'>[!] NO POWER</div>";
 else { gh = gBats.map(b => { 
-const cp=(b.charge/POWER_CFG.batteryCap)*100, dp=b.wear, ep=100-cp-dp; 
+const cp=(b.charge/POWER_CFG.batteryCap)*100, dp=b.wear, ep=Math.max(0,100-cp-dp);
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
 return `<div class="battery-item active-slot" style="border-color:${bCol}; background: linear-gradient(90deg, ${bCol}22 0%, transparent 100%);"><span class="bat-id" style="color:${bCol}; text-shadow: 0 0 3px ${bCol}88;">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 5px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><span class="bat-text" style="color:#aaa;">${b.wear.toFixed(1)}% WR</span><button class="bat-action-btn eject" data-fn="ejectBattery" data-args='["${b.id}"]'>EJECT</button></div>`; 
 }).join('');
@@ -4269,7 +4269,7 @@ if(UI_CACHE['active-grid-list']) UI_CACHE['active-grid-list'].innerHTML = gh;
 // ЦВЕТА БАТАРЕЙ ДЛЯ СТОЙКИ (INVENTORY RACK)
 const lBats = STATE.power.batteries.filter(b => b.loc === 'inventory'); let bh = "";
 for (let i = 0; i < 5; i++) { if (i < lBats.length) { const b = lBats[i];
-const cp = (b.charge / POWER_CFG.batteryCap) * 100; const dp = b.wear; const ep = 100 - cp - dp;
+const cp = (b.charge / POWER_CFG.batteryCap) * 100; const dp = b.wear; const ep = Math.max(0, 100 - cp - dp);
 let bCol = cp >= 50 ? '#44EE77' : cp >= 20 ? '#FFD700' : cp >= 6 ? '#FF9900' : '#FF3333';
 bh += `<div class="battery-item" style="border-left:2px solid ${bCol};"><span class="bat-id" style="color:${bCol};">BAT-${b.id}</span><div class="bat-gauge-container"><div class="bg-charge" style="width:${cp}%; background:${bCol}; box-shadow: 0 0 3px ${bCol};"></div><div class="bg-empty" style="width:${ep}%"></div><div class="bg-wear" style="width:${dp}%"></div></div><div style="display:flex; gap:2px;"><button class="bat-action-btn" style="border-color:var(--agri); color:var(--agri);"
 data-fn="installBattery" data-args='["${b.id}"]'>INSTALL</button><button class="bat-action-btn" style="border-color:var(--danger); color:var(--danger);" data-fn="storeBattery" data-args='["${b.id}"]'>STORE</button></div></div>`; } else { bh += `<div class="battery-item" style="justify-content:center; border:1px dashed #334; color:#445;">[ RACK SLOT EMPTY ]</div>`;
