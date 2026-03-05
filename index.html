@@ -1097,7 +1097,7 @@ LOADING...
 const API_URL = 'https://0xbabayka-exodus-backend.hf.space/api';
 // --- ВЕРСИЯ КЛИЕНТА ---
 // !! Синхронизируйте с GAME_VERSION в server.js при каждом деплое.
-const CLIENT_VERSION = 'v0.2.3.5d';
+const CLIENT_VERSION = 'v0.2.3.7a';
 // --- SERVER TIME SYNC ---
 let SERVER_TIME_OFFSET = 0; // разница между серверным и локальным временем (мс)
 
@@ -2240,17 +2240,49 @@ setTimeout(() => log(`SYS: Offline ${(dt/3600000).toFixed(2)}h. Charge: +${offli
 // --- LOGIC FUNCTIONS (Unchanged logic, just keeping structure) ---
 function createBattery(loc) { STATE.power.batteries.push({ id: Math.random().toString(36).substr(2, 6).toUpperCase(), charge: 0, wear: 0, loc: loc }); }
 
-function installBattery(id) {
-if(STATE.power.batteries.filter(b => b.loc === 'grid').length >= POWER_CFG.maxGridSlots) { log("ERR: GRID FULL."); return; }
-const b = STATE.power.batteries.find(b => b.id === id);
-if(b) { b.loc = 'grid'; updateUI(); }
+// _moveBatteryInProgress: guard against double-click race on battery swap buttons.
+const _moveBatteryInProgress = {};
+// moveBattery: server-authoritative battery location change.
+// ROOT CAUSE FIX: previously installBattery/ejectBattery only mutated STATE
+// without saving to DB. start-* endpoints read from DB and saw stale state
+// (old battery locations) -> 'not enough charge'. Page refresh fixed it
+// because /load pulled fresh DB state. Now: DB is updated atomically first,
+// then STATE is synced from server response. No race condition possible.
+async function moveBattery(id, action) {
+if (_moveBatteryInProgress[id]) return;
+if (!AUTH_TOKEN) return log('ERR: Not authenticated.');
+// Fast client pre-check for immediate feedback
+if (action === 'install') {
+    if (STATE.power.batteries.filter(b => b.loc === 'grid').length >= POWER_CFG.maxGridSlots) return log('ERR: GRID FULL.');
+    const b = STATE.power.batteries.find(b => b.id === id);
+    if (!b || b.loc !== 'inventory') return log('ERR: Battery not in rack.');
+} else {
+    if (STATE.power.batteries.filter(b => b.loc === 'inventory').length >= 5) return log('ERR: RACK FULL.');
+    const b = STATE.power.batteries.find(b => b.id === id);
+    if (!b || b.loc !== 'grid') return log('ERR: Battery not in grid.');
 }
-function ejectBattery(id) {
-const rackCount = STATE.power.batteries.filter(b => b.loc === 'inventory').length;
-if (rackCount >= 5) return log("ERR: RACK FULL.");
-const b = STATE.power.batteries.find(b => b.id === id);
-if(b) { b.loc = 'inventory'; updateUI(); }
+_moveBatteryInProgress[id] = true;
+try {
+    const res = await fetch(`${API_URL}/game/move-battery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-auth-token': AUTH_TOKEN },
+        body: JSON.stringify({ batteryId: id, action })
+    });
+    const data = await res.json();
+    if (!res.ok) { log(`BATTERY ERR: ${data.msg || 'Server error.'}`); return; }
+    // Sync batteries from server response (authoritative DB state)
+    if (data.batteries && Array.isArray(data.batteries)) {
+        STATE.power.batteries = data.batteries;
+    }
+    updateUI();
+} catch (e) {
+    log(`BATTERY ERR: ${e.message}`);
+} finally {
+    _moveBatteryInProgress[id] = false;
 }
+}
+function installBattery(id) { moveBattery(id, 'install'); }
+function ejectBattery(id) { moveBattery(id, 'eject'); }
 
 function storeBattery(id) {
 const b = STATE.power.batteries.find(b => b.id === id);
@@ -2258,6 +2290,7 @@ if(b) {
 b.loc = 'warehouse'; updateUI();
 if(document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
 log(`STORE: BAT-${id} moved to Warehouse.`);
+actionSave();
 }
 }
 
@@ -2269,6 +2302,7 @@ if(b) {
 b.loc = 'inventory'; updateUI();
 if(document.getElementById('modal-warehouse').style.display === 'block') renderWarehouse();
 log(`RETRIEVE: BAT-${id} returned to Rack.`);
+actionSave();
 }
 }
 
